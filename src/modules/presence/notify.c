@@ -2877,7 +2877,7 @@ int process_dialogs(int round, int presence_winfo)
 	int now = (int)time(NULL);
 	int updated = 0;
 	int no_active_watchers = 0;
-	db_query_f query_fn = pa_dbf.query_lock ? pa_dbf.query_lock : pa_dbf.query;
+	db_query_f query_fn = pa_dbf.query; //use plan query(not lock version) to avoid need of tranasction 
 
 	query_cols[n_query_cols] = &str_updated_col;
 	query_vals[n_query_cols].type = DB1_INT;
