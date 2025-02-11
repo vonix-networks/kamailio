@@ -1,0 +1,14 @@
+#####################################
+# Reverted changes in the presence module
+# ([Commit c80cccd](https://github.com/kamailio/kamailio/commit/c80cccd996dcc3b91d4f0f68a2de51104a16d1a5))
+# that caused a PostgreSQL database error. 
+#
+#################################
+###### Debian 12 (Bookworm) Build Instruction ########
+1. cd kmailio (parent directory of `src` directory
+2. make cfg include_modules="presence"
+3. make modules
+4. cd src/modules/presence
+5. git add -f presence.so
+6. git commmit -m "presence.so" module with bugfix
+7. cp presence.so /usr/lib/x86_64-linux-gnu/kamailio/modules/.
