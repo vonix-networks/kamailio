@@ -4,11 +4,8 @@
 # that caused a PostgreSQL database error. 
 #
 #################################
-###### Debian 12 (Bookworm) Build Instruction ########
+###### Debian 12 (Bookworm) Build and Deployment Instruction ########
 1. cd kmailio (parent directory of `src` directory
 2. make cfg include_modules="presence"
 3. make modules
-4. cd src/modules/presence
-5. git add -f presence.so
-6. git commmit -m "presence.so" module with bugfix
-7. cp presence.so /usr/lib/x86_64-linux-gnu/kamailio/modules/.
+4. cp src/modules/presence/presence.so /usr/lib/x86_64-linux-gnu/kamailio/modules/.
