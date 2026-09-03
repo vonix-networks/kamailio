@@ -367,8 +367,10 @@ db1_con_t* db_kazoo_init(const str* _url)
 	return con;
 }
 
-static void db_kazoo_free_connection(struct db_kazoo_connection* con)
+/* srdb1 (5.8+) passes the pool entry; the connection struct embeds it first */
+static void db_kazoo_free_connection(struct pool_con *_pc)
 {
+	struct db_kazoo_connection* con = (struct db_kazoo_connection*)_pc;
 	if (!con)
 		return;
 

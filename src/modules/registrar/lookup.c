@@ -328,7 +328,7 @@ int lookup_helper(struct sip_msg *_m, udomain_t *_d, str *_uri, int _mode)
 
 	get_act_time();
 	reg_lookup_filter_init();
-	ul.lock_udomain(_d, &aor);
+	_reg_ul.lock_udomain(_d, &aor);
 
 	if(puri.gr.s == NULL || puri.gr_val.len > 0) {
 		/* aor or pub-gruu lookup */
@@ -385,7 +385,7 @@ int lookup_helper(struct sip_msg *_m, udomain_t *_d, str *_uri, int _mode)
 		if(res < 0) {
 			LM_DBG("temp gruu '%.*s' not found in usrloc\n", aor.len,
 					ZSW(aor.s));
-			ul.unlock_udomain(_d, &aor);
+			_reg_ul.unlock_udomain(_d, &aor);
 			return -1;
 		}
 		aor = *ptr->aor;
@@ -953,7 +953,7 @@ int registered4(struct sip_msg *_m, udomain_t *_d, str *_uri, int match_flag,
 
 			return 1;
 		}
-		ul.release_urecord(r);
+		_reg_ul.release_urecord(r);
 	}
 
 	_reg_ul.unlock_udomain(_d, &aor);

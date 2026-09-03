@@ -3852,6 +3852,7 @@ int ds_is_addr_from_set(sip_msg_t *_m, struct ip_addr *pipaddr,
 		unsigned short tport, unsigned short tproto, ds_set_t *node, int mode,
 		int export_set_pv)
 {
+	pv_value_t val;
 	ip_addr_t *ipa;
 	ip_addr_t ipaddress;
 	char hn[DS_HN_SIZE];
