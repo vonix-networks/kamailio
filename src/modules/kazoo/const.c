@@ -48,11 +48,11 @@ str str_to_tag_col = str_init("to_tag");
 str str_etag_col = str_init("etag");
 str str_sender_col = str_init("sender");
 
-str str_presence_note_busy = str_init("Busy");
+str str_presence_note_busy = str_init("Ringing");
 str str_presence_note_otp = str_init("On the Phone");
 str str_presence_note_idle = str_init("Idle");
 str str_presence_note_offline = str_init("Offline");
-str str_presence_act_busy = str_init("<rpid:busy/>");
+str str_presence_act_busy = str_init("<rpid:on-the-phone/>");
 str str_presence_act_otp = str_init("<rpid:on-the-phone/>");
 str str_presence_status_offline = str_init("closed");
 str str_presence_status_online = str_init("open");
