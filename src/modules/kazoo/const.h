@@ -7,8 +7,6 @@
  *
  * This file is part of Kamailio, a free SIP server.
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
- *
  * Kamailio is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -72,7 +70,5 @@ extern str dbk_federated_exchange;
 extern str dbk_primary_zone_name;
 extern int dbk_use_hearbeats;
 extern int kz_cmd_pipe;
-extern int kz_server_counter;
-extern int kz_zone_counter;
 
 #endif /* DBK_CONST_H_ */

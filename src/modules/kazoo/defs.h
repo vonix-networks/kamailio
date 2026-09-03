@@ -7,8 +7,6 @@
  *
  * This file is part of Kamailio, a free SIP server.
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
- *
  * Kamailio is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -161,5 +159,13 @@
 		}                                                                  \
 		LM_DBG("%s: [%s]\n", json_name, field.s ? field.s : "Empty");      \
 	} while(0);
+
+
+/* Reconstructed (2026-09): display-name keys read by the 2600hz kz_pua.c
+ * (fall back to the user part when absent; Kazoo 5.4 does not send them —
+ * the key names are inferred from the module's *-User / *-Realm pattern). */
+#define BLF_JSON_FROM_DISPLAY "From-Display"
+#define BLF_JSON_TO_DISPLAY "To-Display"
+#define BLF_JSON_PRES_DISPLAY "Presentity-Display"
 
 #endif /* DBK_DEFS_H_ */
