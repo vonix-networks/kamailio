@@ -1,0 +1,501 @@
+/*
+ * Copyright (C) 2012 Andrew Mortensen
+ *
+ * This file is part of the sca module for Kamailio, a free SIP server.
+ *
+ * The sca module is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version
+ *
+ * The sca module is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA. 02110-1301 USA
+ */
+#include "kz_sca_common.h"
+#include "kz_sca.h"
+#include <assert.h>
+
+#include "kz_sca_util.h"
+#include "../../core/dset.h"
+#include "../../core/parser/sdp/sdp.h"
+
+int kz_sca_get_msg_method(sip_msg_t *msg)
+{
+	assert(msg != NULL);
+
+	if(msg->first_line.type == SIP_REQUEST) {
+		return (msg->REQ_METHOD);
+	}
+
+	return (kz_sca_get_msg_cseq_method(msg));
+}
+
+int kz_sca_get_msg_contact_uri(sip_msg_t *msg, str *contact_uri)
+{
+	contact_body_t *contact_body;
+
+	assert(msg != NULL);
+	assert(contact_uri != NULL);
+
+	if(KZ_SCA_HEADER_EMPTY(msg->contact)) {
+		SCA_DBG("Empty Contact header\n");
+		contact_uri->s = NULL;
+		contact_uri->len = 0;
+
+		return (0);
+	}
+
+	if(parse_contact(msg->contact) < 0) {
+		LM_ERR("Failed to parse Contact header: %.*s\n",
+				STR_FMT(&msg->contact->body));
+		return (-1);
+	}
+	if((contact_body = (contact_body_t *)msg->contact->parsed) == NULL) {
+		LM_ERR("Invalid Contact header: %.*s\n", STR_FMT(&msg->contact->body));
+		return (-1);
+	}
+	if(contact_body->star) {
+		LM_ERR("Invalid Contact header: KZ_SCA Contact must not be \"*\"\n");
+		return (-1);
+	}
+	if(contact_body->contacts == NULL) {
+		LM_ERR("Invalid Contact header: parser found no contacts\n");
+		return (-1);
+	}
+	if(contact_body->contacts->next) {
+		LM_ERR("Invalid Contact header: Contact may only contain one URI\n");
+		return (-1);
+	}
+
+	contact_uri->s = contact_body->contacts->uri.s;
+	contact_uri->len = contact_body->contacts->uri.len;
+
+	return (1);
+}
+
+int kz_sca_get_msg_cseq_number(sip_msg_t *msg)
+{
+	int cseq;
+
+	assert(msg != NULL);
+
+	if(KZ_SCA_HEADER_EMPTY(msg->cseq)) {
+		LM_ERR("Empty Cseq header\n");
+		return (-1);
+	}
+	if(str2int(&(get_cseq(msg)->number), (unsigned int *)&cseq) != 0) {
+		LM_ERR("Bad Cseq header: %.*s\n", STR_FMT(&msg->cseq->body));
+		return (-1);
+	}
+
+	return (cseq);
+}
+
+/*
+ *  assumes cseq header in msg is already parsed
+ */
+int kz_sca_get_msg_cseq_method(sip_msg_t *msg)
+{
+	assert(msg != NULL);
+
+	if(KZ_SCA_HEADER_EMPTY(msg->cseq)) {
+		LM_ERR("Empty Cseq header\n");
+		return (-1);
+	}
+
+	return (get_cseq(msg)->method_id);
+}
+
+int kz_sca_get_avp_value(unsigned short avp_type, int_str avp, str *result)
+{
+	int_str val;
+	struct usr_avp *_avp;
+
+	assert(result != NULL);
+
+	if(avp.s.len > 0) {
+		_avp = search_first_avp(avp_type, avp, &val, 0);
+		if(_avp) {
+			result->s = val.s.s;
+			result->len = val.s.len;
+			return 0;
+		}
+	}
+	return -1;
+}
+
+/*
+ * caller needs to call free_to for *body
+ */
+int kz_sca_parse_uri(struct to_body *body, str *uri)
+{
+	assert(body != NULL);
+	assert(uri != NULL);
+
+	parse_to(uri->s, uri->s + uri->len + 1, body);
+	if(body->error != PARSE_OK) {
+		LM_ERR("Bad uri value[%.*s]\n", STR_FMT(uri));
+		return (-1);
+	}
+	/* ensure the URI is parsed for future use */
+	if(parse_uri(body->uri.s, body->uri.len, &body->parsed_uri) < 0) {
+		LM_ERR("Failed to parse URI %.*s\n", STR_FMT(&body->uri));
+		return (-1);
+	}
+	return (0);
+}
+
+int kz_sca_get_msg_from_header(sip_msg_t *msg, kz_sca_to_body_t *from)
+{
+	struct to_body *f;
+
+	assert(from != NULL);
+	memset(from, 0, sizeof(kz_sca_to_body_t));
+	assert(msg != NULL);
+	if(KZ_SCA_HEADER_EMPTY(msg->from)) {
+		LM_ERR("Empty From header\n");
+		return (-1);
+	}
+	if(parse_from_header(msg) < 0) {
+		LM_ERR("Bad From header\n");
+		return (-1);
+	}
+	from->flags = KZ_SCA_UTIL_FLAG_TO_BODY_MSG;
+	f = get_from(msg);
+	if(KZ_SCA_STR_EMPTY(&f->tag_value)) {
+		LM_ERR("Bad From header: no tag parameter\n");
+		return (-1);
+	}
+
+	// ensure the URI is parsed for future use
+	if(parse_uri(f->uri.s, f->uri.len, GET_FROM_PURI(msg)) < 0) {
+		LM_ERR("Failed to parse From URI %.*s\n", STR_FMT(&f->uri));
+		return (-1);
+	}
+	from->hdr = f;
+
+	return (0);
+}
+
+int kz_sca_get_msg_to_header(sip_msg_t *msg, kz_sca_to_body_t *to)
+{
+	assert(to != NULL);
+	memset(to, 0, sizeof(kz_sca_to_body_t));
+	assert(msg != NULL);
+
+	if(KZ_SCA_HEADER_EMPTY(msg->to)) {
+		LM_ERR("Empty To header\n");
+		return (-1);
+	}
+	to->flags = KZ_SCA_UTIL_FLAG_TO_BODY_MSG;
+	to->hdr = get_to(msg);
+	if(to->hdr == NULL) {
+		parse_to(msg->to->body.s,
+				msg->to->body.s + msg->to->body.len + 1, // end of buffer
+				to->hdr);
+		if(to->hdr->error != PARSE_OK) {
+			LM_ERR("Bad To header\n");
+			return (-1);
+		}
+	}
+
+	// ensure the URI is parsed for future use
+	if(parse_uri(to->hdr->uri.s, to->hdr->uri.len, GET_TO_PURI(msg)) < 0) {
+		LM_ERR("Failed to parse To URI %.*s\n", STR_FMT(&to->hdr->uri));
+		return (-1);
+	}
+
+	return (0);
+}
+
+/*
+ *  count characters requiring escape as defined by escape_common
+ */
+int kz_sca_uri_display_escapes_count(str *display)
+{
+	int c = 0;
+	int i;
+
+	if(KZ_SCA_STR_EMPTY(display)) {
+		return (0);
+	}
+
+	for(i = 0; i < display->len; i++) {
+		switch(display->s[i]) {
+			case '\'':
+			case '"':
+			case '\\':
+			case '\0':
+				c++;
+
+			default:
+				break;
+		}
+	}
+
+	return (c);
+}
+
+int kz_sca_uri_extract_aor(str *uri, str *aor)
+{
+	char *semi;
+
+	assert(aor != NULL);
+
+	if(uri == NULL) {
+		aor->s = NULL;
+		aor->len = 0;
+		return (-1);
+	}
+
+	aor->s = uri->s;
+	semi = memchr(uri->s, ';', uri->len);
+	if(semi != NULL) {
+		aor->len = semi - uri->s;
+	} else {
+		aor->len = uri->len;
+	}
+
+	return (0);
+}
+
+int kz_sca_uri_build_aor(str *aor, int maxlen, str *contact_uri, str *domain_uri)
+{
+	char *p;
+	char *dp;
+	int len;
+
+	assert(aor != NULL);
+	assert(contact_uri != NULL);
+	assert(domain_uri != NULL);
+
+	if(contact_uri->len + domain_uri->len >= maxlen) {
+		return (-1);
+	}
+
+	p = memchr(contact_uri->s, '@', contact_uri->len);
+	if(p == NULL) {
+		// no username, by definition can't be an KZ_SCA line
+		aor->s = NULL;
+		aor->len = 0;
+
+		return (0);
+	}
+	dp = memchr(domain_uri->s, '@', domain_uri->len);
+	if(dp == NULL) {
+		// may be nameless URI
+		dp = memchr(domain_uri->s, ':', domain_uri->len);
+		if(dp == NULL) {
+			// bad domain URI
+			return (-1);
+		}
+	}
+	dp++;
+
+	len = p - contact_uri->s;
+	memcpy(aor->s, contact_uri->s, len);
+	aor->s[len] = '@';
+	len += 1;
+	aor->len = len;
+
+	len = domain_uri->len - (dp - domain_uri->s);
+	memcpy(aor->s + aor->len, dp, len);
+	aor->len += len;
+
+	return (aor->len);
+}
+
+int kz_sca_aor_create_from_info(
+		str *aor, uri_type type, str *user, str *domain, str *port)
+{
+	str scheme = STR_NULL;
+	int len = 0;
+
+	assert(aor != NULL);
+
+	uri_type_to_str(type, &scheme);
+
+	// +1 for ':', +1 for '@'
+	len = scheme.len + 1 + user->len + 1 + domain->len;
+	if(!KZ_SCA_STR_EMPTY(port)) {
+		// +1 for ':'
+		len += 1 + port->len;
+	}
+
+	aor->s = (char *)pkg_malloc(len);
+	if(aor->s == NULL) {
+		LM_ERR("kz_sca_aor_create_from_info: pkg_malloc %d bytes failed\n", len);
+		return (-1);
+	}
+
+	len = 0;
+	KZ_SCA_STR_COPY(aor, &scheme);
+	len += scheme.len;
+
+	*(aor->s + len) = ':';
+	aor->len++;
+	len++;
+
+	KZ_SCA_STR_APPEND(aor, user);
+	len += user->len;
+
+	*(aor->s + len) = '@';
+	aor->len++;
+	len++;
+
+	KZ_SCA_STR_APPEND(aor, domain);
+	len += domain->len;
+
+	if(!KZ_SCA_STR_EMPTY(port)) {
+		*(aor->s + len) = ':';
+		len += 1;
+
+		KZ_SCA_STR_APPEND(aor, port);
+		len += port->len;
+	}
+
+	return (aor->len);
+}
+
+int kz_sca_create_canonical_aor_for_ua(sip_msg_t *msg, str *c_aor, int ua_opts)
+{
+	kz_sca_to_body_t tf;
+	sip_uri_t c_uri;
+	str tf_aor = STR_NULL;
+	str contact_uri = STR_NULL;
+	int rc = -1;
+
+	assert(msg != NULL);
+	assert(c_aor != NULL);
+
+	memset(c_aor, 0, sizeof(str));
+	memset(&tf, 0, sizeof(kz_sca_to_body_t));
+
+	if((ua_opts & KZ_SCA_AOR_TYPE_AUTO)) {
+		if(msg->first_line.type == SIP_REQUEST) {
+			ua_opts = KZ_SCA_AOR_TYPE_UAC;
+		} else {
+			ua_opts = KZ_SCA_AOR_TYPE_UAS;
+		}
+	}
+
+	if((ua_opts & KZ_SCA_AOR_TYPE_UAC)) {
+		if(kz_sca_get_msg_from_header(msg, &tf) < 0) {
+			LM_ERR("kz_sca_create_canonical_aor: failed to get From header\n");
+			goto done;
+		}
+	} else {
+		if(kz_sca_get_msg_to_header(msg, &tf) < 0) {
+			LM_ERR("kz_sca_create_canonical_aor: failed to get To header\n");
+			goto done;
+		}
+	}
+
+	if(kz_sca_uri_extract_aor(&tf.hdr->uri, &tf_aor) < 0) {
+		LM_ERR("kz_sca_create_canonical_aor: failed to extract AoR from "
+			   "URI <%.*s>\n",
+				STR_FMT(&tf.hdr->uri));
+		goto done;
+	}
+
+	memset(&c_uri, 0, sizeof(sip_uri_t));
+	if((rc = kz_sca_get_msg_contact_uri(msg, &contact_uri)) < 0) {
+		LM_ERR("kz_sca_create_canonical_aor: failed to get contact URI from "
+			   "Contact <%.*s>\n",
+				STR_FMT(&msg->contact->body));
+		goto done;
+	}
+	if(rc > 0) {
+		if(parse_uri(contact_uri.s, contact_uri.len, &c_uri) < 0) {
+			LM_ERR("kz_sca_create_canonical_aor: failed to parse Contact URI "
+				   "<%.*s>\n",
+					STR_FMT(&contact_uri));
+			rc = -1;
+			goto done;
+		}
+	}
+
+	if(KZ_SCA_STR_EMPTY(&c_uri.user)
+			|| KZ_SCA_STR_EQ(&c_uri.user, &tf.hdr->parsed_uri.user)) {
+		// empty contact header or Contact user matches To/From AoR
+		c_aor->s = (char *)pkg_malloc(tf_aor.len);
+		c_aor->len = tf_aor.len;
+		memcpy(c_aor->s, tf_aor.s, tf_aor.len);
+	} else {
+		// Contact user and To/From user mismatch
+		if(kz_sca_aor_create_from_info(c_aor, c_uri.type, &c_uri.user,
+				   &tf.hdr->parsed_uri.host, &tf.hdr->parsed_uri.port)
+				< 0) {
+			LM_ERR("kz_sca_create_canonical_aor: failed to create AoR from "
+				   "Contact <%.*s> and URI <%.*s>\n",
+					STR_FMT(&contact_uri), STR_FMT(&tf_aor));
+			goto done;
+		}
+	}
+
+	rc = 1;
+
+done:
+	if(tf.flags & KZ_SCA_UTIL_FLAG_TO_BODY_ALLOC) {
+		free_to(tf.hdr);
+	}
+	return (rc);
+}
+
+int kz_sca_create_canonical_aor(sip_msg_t *msg, str *c_aor)
+{
+	return (kz_sca_create_canonical_aor_for_ua(msg, c_aor, KZ_SCA_AOR_TYPE_AUTO));
+}
+
+/*
+ * XXX this considers any held stream to mean the call is on hold. correct?
+ */
+int kz_sca_call_is_held(sip_msg_t *msg)
+{
+	sdp_session_cell_t *session;
+	sdp_stream_cell_t *stream;
+	int n_sess;
+	int n_str;
+	int is_held = 0;
+	int rc;
+
+	if(sca->cfg->onhold_bflag >= 0) {
+		if(isbflagset(0, (flag_t)sca->cfg->onhold_bflag) == 1) {
+			SCA_DBG("onhold_bflag set, skip parse_sdp and set held\n");
+			return (1);
+		}
+	}
+	rc = parse_sdp(msg);
+	if(rc < 0) {
+		LM_ERR("kz_sca_call_is_held: parse_sdp body failed\n");
+		return (0);
+	} else if(rc > 0) {
+		SCA_DBG("kz_sca_call_is_held: parse_sdp returned %d, no SDP body\n", rc);
+		return (0);
+	}
+
+	// Cf. modules_k/textops's exported is_audio_on_hold
+	for(n_sess = 0, session = get_sdp_session(msg, n_sess); session != NULL;
+			n_sess++, session = get_sdp_session(msg, n_sess)) {
+
+		for(n_str = 0, stream = get_sdp_stream(msg, n_sess, n_str);
+				stream != NULL;
+				n_str++, stream = get_sdp_stream(msg, n_sess, n_str)) {
+			if(stream->is_on_hold) {
+				SCA_DBG("kz_sca_call_is_held: parse_sdp detected stream is on "
+					   "hold\n");
+				is_held = 1;
+				goto done;
+			}
+		}
+	}
+
+done:
+	return (is_held);
+}
