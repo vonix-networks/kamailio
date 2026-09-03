@@ -381,10 +381,10 @@ void wsconn_close_now(ws_connection_t *wsc)
 	struct tcp_connection *con = tcpconn_get(wsc->id, 0, 0, 0, 0);
 
 	if(wsconn_rm(wsc, WSCONN_EVENTROUTE_YES) < 0)
-		LM_ERR("removing WebSocket connection\n");
+		LM_DBG("removing WebSocket connection\n");
 
 	if(con == NULL) {
-		LM_ERR("getting TCP/TLS connection\n");
+		LM_DBG("getting TCP/TLS connection\n");
 		return;
 	}
 
@@ -463,7 +463,7 @@ ws_connection_t *wsconn_get(int id)
 
 	WSCONN_LOCK;
 	for(wsc = wsconn_id_hash[id_hash]; wsc; wsc = wsc->id_next) {
-		if(wsc->id == id) {
+		if(wsc->id == id && wsc->state != WS_S_REMOVING) {
 			wsconn_ref(wsc);
 			LM_DBG("wsconn_get id [%d] returns wsc [%p] refcnt [%d]\n", id, wsc,
 					atomic_get(&wsc->refcnt));
@@ -715,6 +715,7 @@ void ws_timer(unsigned int ticks, void *param)
 
 	for(wsc = rmlist.head; wsc;) {
 		next = wsc->id_next;
+		wsc->run_event = 1;
 		wsconn_dtor(wsc);
 		wsc = next;
 	}

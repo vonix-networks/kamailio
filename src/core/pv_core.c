@@ -170,6 +170,39 @@ static int pv_get_defn(sip_msg_t *msg, pv_param_t *param, pv_value_t *res)
 	}
 }
 
+static int pv_parse_flag_name(pv_spec_p sp, str *in)
+{
+	if (in == NULL || in->s == NULL || sp == NULL) {
+		LM_ERR("INVALID DEF NAME\n");
+		return -1;
+	}
+	sp->pvp.pvn.type = PV_NAME_INTSTR;
+	sp->pvp.pvn.u.isname.type = AVP_NAME_STR;
+	sp->pvp.pvn.u.isname.name.s = *in;
+	return 0;
+
+}
+
+static int pv_get_flag(struct sip_msg* msg, pv_param_t* p, pv_value_t* res)
+{
+	return pv_get_sintval(msg, p, res, get_flag_no(p->pvn.u.isname.name.s.s, p->pvn.u.isname.name.s.len));
+}
+
+static int pv_get_bflag(struct sip_msg* msg, pv_param_t* p, pv_value_t* res)
+{
+	return pv_get_sintval(msg, p, res, get_bflag_no(p->pvn.u.isname.name.s.s, p->pvn.u.isname.name.s.len));
+}
+
+static int pv_get_xflag(struct sip_msg* msg, pv_param_t* p, pv_value_t* res)
+{
+	return pv_get_sintval(msg, p, res, get_xflag_no(p->pvn.u.isname.name.s.s, p->pvn.u.isname.name.s.len));
+}
+
+static int pv_get_sflag(struct sip_msg* msg, pv_param_t* p, pv_value_t* res)
+{
+	return pv_get_sintval(msg, p, res, get_sflag_no(p->pvn.u.isname.name.s.s, p->pvn.u.isname.name.s.len));
+}
+
 /**
  *
  */
@@ -186,6 +219,14 @@ static pv_export_t core_pvs[] = {
 				0, 0},
 		{STR_STATIC_INIT("defn"), PVT_OTHER, pv_get_defn, 0, pv_parse_defn_name,
 				0, 0, 0},
+		{STR_STATIC_INIT("flag"), PVT_OTHER, pv_get_flag, 0,
+				pv_parse_flag_name, 0, 0, 0},
+		{STR_STATIC_INIT("bflag"), PVT_OTHER, pv_get_bflag, 0,
+				pv_parse_flag_name, 0, 0, 0},
+		{STR_STATIC_INIT("xflag"), PVT_OTHER, pv_get_xflag, 0,
+				pv_parse_flag_name, 0, 0, 0},
+		{STR_STATIC_INIT("sflag"), PVT_OTHER, pv_get_sflag, 0,
+				pv_parse_flag_name, 0, 0, 0},
 
 		{{0, 0}, 0, 0, 0, 0, 0, 0, 0}};
 

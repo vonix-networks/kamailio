@@ -124,6 +124,13 @@ uint32_t ds_dns_mode = DS_DNS_MODE_INIT;
 static int ds_dns_interval = 600;
 int ds_dns_ttl = 0;
 
+/*
+ * Number of times trying rehash, to find an active destination.
+ *   Default, 0 : disabled. to ensure backward compatibility with running enviroments
+ *   -1 : Total number of destinations
+ */
+int ds_rehash_max = 0;
+
 str ds_outbound_proxy = STR_NULL;
 
 /* tm */
@@ -142,6 +149,8 @@ str ds_setid_pvname   = STR_NULL;
 pv_spec_t ds_setid_pv;
 str ds_attrs_pvname   = STR_NULL;
 pv_spec_t ds_attrs_pv;
+str ds_uri_pvname   = STR_NULL;
+pv_spec_t ds_uri_pv;
 
 str ds_event_callback = STR_NULL;
 str ds_db_extra_attrs = STR_NULL;
@@ -277,6 +286,7 @@ static param_export_t params[]={
 	{"hash_pvar",       PARAM_STR, &hash_pvar_param},
 	{"setid_pvname",    PARAM_STR, &ds_setid_pvname},
 	{"attrs_pvname",    PARAM_STR, &ds_attrs_pvname},
+	{"uri_pvname",    PARAM_STR, &ds_uri_pvname},
 	{"ds_probing_threshold", INT_PARAM, &probing_threshold},
 	{"ds_inactive_threshold", INT_PARAM, &inactive_threshold},
 	{"ds_ping_method",     PARAM_STR, &ds_ping_method},
@@ -302,6 +312,7 @@ static param_export_t params[]={
 	{"ds_dns_mode",        PARAM_INT, &ds_dns_mode},
 	{"ds_dns_interval",    PARAM_INT, &ds_dns_interval},
 	{"ds_dns_ttl",         PARAM_INT, &ds_dns_ttl},
+	{"ds_rehash_max",      PARAM_INT, &ds_rehash_max },
 	{0,0,0}
 };
 
@@ -470,6 +481,14 @@ static int mod_init(void)
 		if(pv_parse_spec(&ds_attrs_pvname, &ds_attrs_pv) == NULL
 				|| !pv_is_w(&ds_attrs_pv)) {
 			LM_ERR("[%s]- invalid attrs_pvname\n", ds_attrs_pvname.s);
+			return -1;
+		}
+	}
+
+	if(ds_uri_pvname.s != 0) {
+		if(pv_parse_spec(&ds_uri_pvname, &ds_uri_pv) == NULL
+				|| !pv_is_w(&ds_uri_pv)) {
+			LM_ERR("[%s]- invalid uri_pvname\n", ds_uri_pvname.s);
 			return -1;
 		}
 	}

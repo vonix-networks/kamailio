@@ -43,6 +43,7 @@
 #include "ul_keepalive.h"
 
 extern int ul_keepalive_timeout;
+extern int ul_keepalive_interval;
 
 static int ul_ka_send(str *kamsg, dest_info_t *kadst);
 
@@ -132,6 +133,9 @@ int ul_ka_urecord(urecord_t *ur)
 		if(uc->c.len <= 0) {
 			continue;
 		}
+		if(!uc->keepalive) {
+			continue;
+		}
 		if((ul_ka_filter & GAU_OPT_SERVER_ID) && (uc->server_id != server_id)) {
 			continue;
 		}
@@ -157,6 +161,11 @@ int ul_ka_urecord(urecord_t *ur)
 					uc->expires = tnow + 10;
 					continue;
 				}
+			}
+		}
+		if(ul_keepalive_interval > 0) {
+			if(uc->last_keepalive + ul_keepalive_interval > tnow ) {
+				continue;
 			}
 		}
 		if(uc->received.len > 0) {

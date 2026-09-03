@@ -265,10 +265,9 @@ again:
 					}
 				}
 				LOG(cfg_get(core, core_cfg, corelog),
-						"error reading: %s (%d) ([%s]:%u ->", strerror(errno),
-						errno, ip_addr2a(&c->rcv.src_ip), c->rcv.src_port);
-				LOG(cfg_get(core, core_cfg, corelog), "-> [%s]:%u)\n",
-						ip_addr2a(&c->rcv.dst_ip), c->rcv.dst_port);
+						"error reading: %s (%d) ([%s]:%u -> [%s]:%u)\n", strerror(errno),
+						errno, ip_addr2a(&c->rcv.src_ip), c->rcv.src_port,
+					    ip_addr2a(&c->rcv.dst_ip), c->rcv.dst_port);
 				if(errno == ETIMEDOUT) {
 					c->event = TCP_CLOSED_TIMEOUT;
 				} else if(errno == ECONNRESET) {
@@ -1035,11 +1034,31 @@ int tcp_read_headers(struct tcp_connection *c, rd_conn_flags_t *read_flags)
 					/* locate transaction id in first line
 					 * -- first line exists, that's why we are here */
 					mfline = q_memchr(r->start, '\n', r->pos - r->start);
-					mtransid.s = q_memchr(
-							r->start + 5 /* 'MSRP ' */, ' ', mfline - r->start);
+					if(mfline == NULL || mfline - r->start < 8) {
+						r->error = TCP_READ_ERROR;
+						r->state = H_SKIP; /* skip now */
+						goto skip;
+					}
+					mtransid.s = q_memchr(r->start + 5 /* 'MSRP ' */, ' ',
+							mfline - r->start - 5);
+					if(mtransid.s == NULL) {
+						r->error = TCP_READ_ERROR;
+						r->state = H_SKIP; /* skip now */
+						goto skip;
+					}
 					mtransid.len = mtransid.s - r->start - 5;
+					if(mtransid.len <= 0) {
+						r->error = TCP_READ_ERROR;
+						r->state = H_SKIP; /* skip now */
+						goto skip;
+					}
 					mtransid.s = r->start + 5;
 					trim(&mtransid);
+					if(mtransid.len <= 0) {
+						r->error = TCP_READ_ERROR;
+						r->state = H_SKIP; /* skip now */
+						goto skip;
+					}
 					if(memcmp(mtransid.s,
 							   p - 1 /*\r*/ - 1 /* '+'|'#'|'$' */
 									   - mtransid.len,
@@ -1520,9 +1539,6 @@ again:
 		}
 
 		if(unlikely(bytes < 0)) {
-			LOG(cfg_get(core, core_cfg, corelog),
-					"ERROR: tcp_read_req: error reading - c: %p r: %p (%d)\n",
-					con, req, bytes);
 			resp = CONN_ERROR;
 			goto end_req;
 		}

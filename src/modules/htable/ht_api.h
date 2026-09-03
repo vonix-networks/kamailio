@@ -70,6 +70,7 @@ typedef struct _ht
 	int flags;
 	int_str initval;
 	int updateexpire;
+	unsigned int rollingexpire;
 	unsigned int htsize;
 	int dmqreplicate;
 	int evex_index;
@@ -88,7 +89,7 @@ typedef struct _ht_pv
 
 int ht_add_table(str *name, int autoexp, str *dbtable, str *dbcols, int size,
 		int dbmode, int itype, int_str *ival, int updateexpire,
-		int dmqreplicate);
+		int dmqreplicate, int rollingexpire);
 int ht_init_tables(void);
 int ht_destroy(void);
 int ht_set_cell(ht_t *ht, str *name, int type, int_str *val, int mode);

@@ -29,14 +29,12 @@
 #include "../../core/sr_module.h"
 #include "../../core/dprint.h"
 #include "../../core/forward.h"
-#include "../../core/flags.h"
 #include "../../core/dset.h"
 #include "../../core/mod_fix.h"
 #include "../../core/kemi.h"
 #include "../../core/parser/parse_uri.h"
 #include "../../core/utils/sruid.h"
 
-#include "flags.h"
 #include "km_core.h"
 #include "core_stats.h"
 #include "pkg_stats.h"
@@ -68,24 +66,6 @@ static pv_export_t mod_pvs[] = {{{"sruid", sizeof("sruid") - 1}, PVT_OTHER,
 		{{0, 0}, 0, 0, 0, 0, 0, 0, 0}};
 
 static cmd_export_t cmds[] = {
-		{"setsflag", (cmd_function)w_setsflag, 1, fixup_igp_null,
-				fixup_free_igp_null, ANY_ROUTE},
-		{"resetsflag", (cmd_function)w_resetsflag, 1, fixup_igp_null,
-				fixup_free_igp_null, ANY_ROUTE},
-		{"issflagset", (cmd_function)w_issflagset, 1, fixup_igp_null,
-				fixup_free_igp_null, ANY_ROUTE},
-		{"setbflag", (cmd_function)w_setbflag, 1, fixup_igp_null,
-				fixup_free_igp_null, ANY_ROUTE},
-		{"setbflag", (cmd_function)w_setbflag, 2, fixup_igp_igp,
-				fixup_free_igp_igp, ANY_ROUTE},
-		{"resetbflag", (cmd_function)w_resetbflag, 1, fixup_igp_null,
-				fixup_free_igp_null, ANY_ROUTE},
-		{"resetbflag", (cmd_function)w_resetbflag, 2, fixup_igp_igp,
-				fixup_free_igp_igp, ANY_ROUTE},
-		{"isbflagset", (cmd_function)w_isbflagset, 1, fixup_igp_null,
-				fixup_free_igp_null, ANY_ROUTE},
-		{"isbflagset", (cmd_function)w_isbflagset, 2, fixup_igp_igp,
-				fixup_free_igp_igp, ANY_ROUTE},
 		{"setdsturi", (cmd_function)w_setdsturi, 1, fixup_spve_null,
 				fixup_free_spve_null, ANY_ROUTE},
 		{"resetdsturi", (cmd_function)w_resetdsturi, 0, 0, 0, ANY_ROUTE},

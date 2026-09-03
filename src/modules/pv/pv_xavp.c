@@ -677,6 +677,10 @@ int xavp_params_explode(str *params, str *xname)
 		memset(&xval, 0, sizeof(sr_xval_t));
 		xval.type = SR_XTYPE_STR;
 		xval.v.s = pit->body;
+		if(xval.v.s.s[0] == '\'' || xval.v.s.s[0] == '\"') {
+			xval.v.s.s++;
+			xval.v.s.len -= 2;
+		}
 		if(xavp_add_value(&pit->name, &xval, &xavp) == NULL) {
 			free_params(params_list);
 			xavp_destroy_list(&xavp);

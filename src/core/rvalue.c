@@ -531,6 +531,7 @@ enum rval_type rve_guess_type(struct rval_expr *rve)
 		case RVE_STREQ_OP:
 		case RVE_STRDIFF_OP:
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 		case RVE_IPLUS_OP:
 		case RVE_STRLEN_OP:
 		case RVE_STREMPTY_OP:
@@ -610,6 +611,7 @@ int rve_is_constant(struct rval_expr *rve)
 		case RVE_STREQ_OP:
 		case RVE_STRDIFF_OP:
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 		case RVE_PLUS_OP:
 		case RVE_IPLUS_OP:
 		case RVE_CONCAT_OP:
@@ -675,6 +677,7 @@ static int rve_op_unary(enum rval_expr_op op)
 		case RVE_STREQ_OP:
 		case RVE_STRDIFF_OP:
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 		case RVE_PLUS_OP:
 		case RVE_IPLUS_OP:
 		case RVE_CONCAT_OP:
@@ -853,6 +856,7 @@ int rve_check_type(enum rval_type *type, struct rval_expr *rve,
 		case RVE_STREQ_OP:
 		case RVE_STRDIFF_OP:
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 			*type = RV_LONG;
 			if(rve_check_type(&type1, rve->left.rve, bad_rve, bad_t, exp_t)) {
 				if(rve_check_type(
@@ -1094,8 +1098,10 @@ error:
 
 /** log a message, appending rve position and a '\n'.*/
 #define RVE_LOG(lev, rve, txt)                                              \
-	LOG((lev), txt " (%d,%d-%d,%d)\n", (rve)->fpos.s_line, rve->fpos.s_col, \
-			(rve)->fpos.e_line, rve->fpos.e_col)
+	LOG((lev), txt " (%s %s) (%d,%d-%d,%d)\n", \
+			(rve)->fpos.fname, rve->fpos.rname, \
+			(rve)->fpos.s_line, rve->fpos.s_col, \
+			(rve)->fpos.e_line, rve->fpos.e_col )
 
 
 /** macro for checking and handling rval_get_long() retcode.
@@ -1519,8 +1525,10 @@ inline static int bool_rvstrop2(
 			*res = (s1->len != s2->len) || (memcmp(s1->s, s2->s, s1->len) != 0);
 			break;
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 			if(likely(rv2->flags & RV_RE_F)) {
 				*res = (regexec(rv2->v.re.regex, rv1->v.s.s, 0, 0, 0) == 0);
+				if(op == RVE_NOMATCH_OP) *res = !(*res);
 			} else {
 				/* we need to compile the RE on the fly */
 				if(unlikely(regcomp(&tmp_re, s2->s,
@@ -1530,6 +1538,7 @@ inline static int bool_rvstrop2(
 					goto error;
 				}
 				*res = (regexec(&tmp_re, s1->s, 0, 0, 0) == 0);
+				if(op == RVE_NOMATCH_OP) *res = !(*res);
 				regfree(&tmp_re);
 			}
 			break;
@@ -2055,6 +2064,7 @@ int rval_expr_eval_long(struct run_act_ctx *h, struct sip_msg *msg, long *res,
 		case RVE_STREQ_OP:
 		case RVE_STRDIFF_OP:
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 			if(unlikely((rv1 = rval_expr_eval(h, msg, rve->left.rve)) == 0)) {
 				ret = -1;
 				break;
@@ -2174,6 +2184,7 @@ int rval_expr_eval_rvlong(struct run_act_ctx *h, struct sip_msg *msg,
 		case RVE_STREQ_OP:
 		case RVE_STRDIFF_OP:
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 		case RVE_STRLEN_OP:
 		case RVE_STREMPTY_OP:
 		case RVE_DEFINED_OP:
@@ -2309,6 +2320,7 @@ struct rvalue *rval_expr_eval(
 		case RVE_STREQ_OP:
 		case RVE_STRDIFF_OP:
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 		case RVE_STRLEN_OP:
 		case RVE_STREMPTY_OP:
 		case RVE_DEFINED_OP:
@@ -2673,6 +2685,7 @@ struct rval_expr *mk_rval_expr2(enum rval_expr_op op, struct rval_expr *rve1,
 		case RVE_STREQ_OP:
 		case RVE_STRDIFF_OP:
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 		case RVE_CONCAT_OP:
 		case RVE_SELVALEXP_OP:
 		case RVE_SELVALOPT_OP:
@@ -2745,6 +2758,7 @@ static int rve_op_is_assoc(enum rval_expr_op op)
 		case RVE_STREQ_OP:
 		case RVE_STRDIFF_OP:
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 		case RVE_SELVALEXP_OP:
 		case RVE_SELVALOPT_OP:
 			return 0;
@@ -2800,6 +2814,7 @@ static int rve_op_is_commutative(enum rval_expr_op op)
 		case RVE_LTE_OP:
 		case RVE_CONCAT_OP:
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 		case RVE_SELVALEXP_OP:
 		case RVE_SELVALOPT_OP:
 			return 0;
@@ -3802,6 +3817,7 @@ int fix_rval_expr(void *p)
 				goto error;
 			break;
 		case RVE_MATCH_OP:
+		case RVE_NOMATCH_OP:
 			ret = fix_match_rve(rve);
 			if(ret < 0)
 				goto error;

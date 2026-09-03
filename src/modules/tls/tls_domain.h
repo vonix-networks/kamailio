@@ -241,6 +241,14 @@ void tls_free_cfg(tls_domains_cfg_t *cfg);
 void tls_destroy_cfg(void);
 
 /**
+ * @brief Destroy all TLS configuration data without calling SSL_CTX_free()
+ *
+ * Safe for process shutdown - avoids deadlock on OpenSSL internal
+ * pthread rwlocks that may be held by dead worker processes.
+ */
+void tls_destroy_cfg_unsafe(void);
+
+/**
  * @brief Check if a TLS configuration domain exists
  */
 int ksr_tls_domain_duplicated(tls_domains_cfg_t *cfg, tls_domain_t *d);
