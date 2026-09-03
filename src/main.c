@@ -537,7 +537,7 @@ char *sr_memmng_shm = NULL;
 static int *_sr_instance_started = NULL;
 
 int ksr_cfg_print_mode = 0;
-int ksr_atexit_mode = 1;
+int ksr_atexit_mode = 0;
 
 int ksr_wait_worker1_mode = 0;
 int ksr_wait_worker1_time = 4000000;

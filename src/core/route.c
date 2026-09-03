@@ -58,6 +58,7 @@
 #include "ut.h"
 #include "switch.h"
 #include "cfg/cfg_struct.h"
+#include "mod_fix.h"
 
 #define RT_HASH_SIZE 8 /* route names hash */
 
@@ -538,7 +539,7 @@ int fix_expr(struct expr *exp)
 		}
 
 
-		if(exp->op == MATCH_OP) {
+		if(exp->op == MATCH_OP || exp->op == NOMATCH_OP){
 			/* right side either has to be string, in which case
 				      * we turn it into regular expression, or it is regular
 				      * expression already. In that case we do nothing
@@ -1128,6 +1129,70 @@ int fix_actions(struct action *a)
 					goto error;
 				}
 				break;
+			case ROUTES_T:
+				#define MAX_ROUTES 25
+				if (t->val[0].type == RVE_ST) {
+					rve=(struct rval_expr*)t->val[0].u.data;
+					if (!rve_is_constant(rve)) {
+						if ((ret=fix_rval_expr(t->val[0].u.data)) < 0){
+							LM_ERR("route() failed to fix rve at %s:%d\n",
+								(t->cfile)?t->cfile:"line", t->cline);
+							ret = E_BUG;
+							goto error;
+						}
+					} else {
+						/* rve is constant => replace it with a string */
+						if ((rv = rval_expr_eval(0, 0, rve)) == 0 ||
+								rval_get_str(0, 0, &s, rv, 0) < 0) {
+							/* out of mem. or bug ? */
+							rval_destroy(rv);
+							LM_ERR("route() failed to fix ct. rve at %s:%d\n",
+								(t->cfile)?t->cfile:"line", t->cline);
+							ret = E_BUG;
+							goto error;
+						}
+						rval_destroy(rv);
+						rve_destroy(rve);
+						t->val[0].type = STRING_ST;
+						t->val[0].u.string = s.s;
+						t->val[0].u.str.len = s.len; /* not used */
+					}
+				}
+				if (t->val[0].type == STRING_ST) {
+					str route = {t->val[0].u.string, strlen(t->val[0].u.string)};
+					if (strchr(route.s, '$')) {
+						if (fixup_spve_null(&t->val[0].u.data, 1) != 0) {
+							LM_ERR("route() failed to fix ct. at %s:%d\n",
+								(t->cfile)?t->cfile:"line", t->cline);
+							ret = E_BUG;
+							goto error;
+						}
+						t->val[0].type = EXPR_ST;
+					} else {
+						struct str_hash_entry* e;
+						long routes[MAX_ROUTES];
+						int count = 0, x;
+						memset(routes, 0, sizeof(routes));
+						for (x = 0; x < main_rt.names.size; x++) {
+							clist_foreach(&main_rt.names.table[x], e, next) {
+								if (e->key.len > route.len && !strncasecmp(e->key.s, route.s, route.len)) {
+									routes[count] = e->u.n;
+									count++;
+								}
+							}
+						}
+						count++;
+						t->val[0].type = ROUTE_LIST;
+						pkg_free(t->val[0].u.string);
+						t->val[0].u.data = pkg_malloc(sizeof(long) * count);
+						memcpy(t->val[0].u.data, routes, sizeof(long) * count);
+					}
+				} else if (t->val[0].type != ROUTE_LIST &&	t->val[0].type != RVE_ST) {
+					BUG("invalid subtype %d for route()\n", t->val[0].type);
+					ret = E_BUG;
+					goto error;
+				}
+				break;
 			case CFG_SELECT_T:
 				if(t->val[1].type == RVE_ST) {
 					rve = t->val[1].u.data;
@@ -1330,8 +1395,8 @@ inline static int comp_str(int op, str *left, int rtype, union exp_op *r,
 			}
 			break;
 		case RE_ST:
-			if(unlikely(op != MATCH_OP)) {
-				LM_CRIT("Bad operator %d, ~= expected\n", op);
+			if(unlikely(op != MATCH_OP && op != NOMATCH_OP)) {
+				LM_CRIT("Bad operator %d, ~= or != expected\n", op);
 				goto error;
 			}
 			break;
@@ -1366,6 +1431,7 @@ inline static int comp_str(int op, str *left, int rtype, union exp_op *r,
 			ret = (strncasecmp(left->s, right->s, left->len) != 0);
 			break;
 		case MATCH_OP:
+		case NOMATCH_OP:
 			/* this is really ugly -- we put a temporary zero-terminating
 			 * character in the original string; that's because regexps
 			 * take 0-terminated strings and our messages are not
@@ -1416,6 +1482,7 @@ inline static int comp_str(int op, str *left, int rtype, union exp_op *r,
 					LM_CRIT("Bad operator type %d, for ~= \n", rtype);
 					goto error;
 			}
+			if (op == NOMATCH_OP) ret = !ret;
 			left->s[left->len] = backup;
 			break;
 		default:
@@ -1620,6 +1687,7 @@ inline static int check_self_op(int op, str *s, unsigned short p)
 	switch(op) {
 		case EQUAL_OP:
 		case MATCH_OP:
+		case NOMATCH_OP:
 			break;
 		case DIFF_OP:
 			ret = (ret > 0) ? 0 : 1;
@@ -1720,7 +1788,7 @@ inline static int comp_ip(int op, struct ip_addr *ip, int rtype,
 			}
 			break;
 		case RE_ST:
-			if(unlikely(op != MATCH_OP))
+			if(unlikely(op != MATCH_OP && op != NOMATCH_OP))
 				goto error_op;
 			/* 1: compare with ip2str*/
 			ret = comp_string(op, ip_addr2a(ip), rtype, r, msg, ctx);
@@ -1781,6 +1849,7 @@ inline static int comp_ip(int op, struct ip_addr *ip, int rtype,
 			}
 			break;
 		case MATCH_OP:
+		case NOMATCH_OP:
 			/* 0: try if ip or network (ip/mask)
 			  (one should not use MATCH for that, but try to be nice)*/
 			if(mk_net_str(&net, right) == 0) {

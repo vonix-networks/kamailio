@@ -27,6 +27,7 @@
 
 #define KSR_PPDEF_NORMAL (0)	  /* define normal value */
 #define KSR_PPDEF_QUOTED (1 << 0) /* define quoted value */
+#define KSR_PPDEF_NOEVAL (1 << 1) /* don't eval value */
 
 #define KSR_PPDEF_VALREQ (0)	  /* define with value required (defenv) */
 #define KSR_PPDEF_VALTRY (1 << 0) /* define only if value exists (trydefenv) */
@@ -53,6 +54,7 @@ int pp_lookup(int len, const char *text);
 int pp_subst_add(char *data);
 int pp_substdef_add(char *data, int mode);
 int pp_subst_run(char **data);
+int pp_subst_run_size(char **data, int *size);
 
 int pp_define(int len, const char *text);
 int pp_define_set(int len, char *text, int mode);

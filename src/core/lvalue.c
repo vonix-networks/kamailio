@@ -408,8 +408,10 @@ int lval_assign(struct run_act_ctx *h, struct sip_msg *msg, struct lvalue *lv,
 			break;
 	}
 	if(unlikely(ret < 0)) {
-		LM_ERR("assignment failed at pos: (%d,%d-%d,%d)\n", rve->fpos.s_line,
-				rve->fpos.s_col, rve->fpos.e_line, rve->fpos.e_col);
+		LM_ERR("assignment failed at pos: (%s %s) (%d,%d-%d,%d)\n",
+			rve->fpos.fname, rve->fpos.rname,
+			rve->fpos.s_line, rve->fpos.s_col,
+			rve->fpos.e_line, rve->fpos.e_col);
 	} else {
 		if(unlikely(_log_assign_action != NULL))
 			_log_assign_action(msg, lv);
