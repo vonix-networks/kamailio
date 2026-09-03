@@ -74,6 +74,7 @@ extern int
 #define AVP_RCD_EXP 4
 #define AVP_RCD_RCV 8
 #define AVP_RCD_PATH 16
+#define AVP_RCD_SOCK 32
 
 extern int nat_flag;
 extern int tcp_persistent_flag;

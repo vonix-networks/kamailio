@@ -255,7 +255,7 @@ ht_t *ht_get_table(str *name)
 
 int ht_add_table(str *name, int autoexp, str *dbtable, str *dbcols, int size,
 		int dbmode, int itype, int_str *ival, int updateexpire,
-		int dmqreplicate)
+		int dmqreplicate, int rollingexpire)
 {
 	unsigned int htid;
 	ht_t *ht;
@@ -295,6 +295,7 @@ int ht_add_table(str *name, int autoexp, str *dbtable, str *dbcols, int size,
 	ht->htid = htid;
 	ht->htexpire = autoexp;
 	ht->updateexpire = updateexpire;
+	ht->rollingexpire = ht->rollingexpire;
 	ht->name = *name;
 	if(dbtable != NULL && dbtable->len > 0)
 		ht->dbtable = *dbtable;
@@ -852,6 +853,11 @@ ht_cell_t *ht_cell_pkg_copy(ht_t *ht, str *name, ht_cell_t *old)
 				ht_slot_unlock(ht, idx);
 				return NULL;
 			}
+
+			if(ht->htexpire > 0 && ht->rollingexpire) {
+				it->expire = time(NULL) + ht->htexpire;
+			}
+
 			if(old != NULL) {
 				if(old->msize >= it->msize) {
 					memcpy(old, it, it->msize);
@@ -957,6 +963,7 @@ int ht_table_spec(char *spec)
 	unsigned int dbmode = 0;
 	unsigned int updateexpire = 1;
 	unsigned int dmqreplicate = 0;
+	unsigned int rollingexpire = 0;
 	str in;
 	str tok;
 	param_t *pit = NULL;
@@ -1023,13 +1030,18 @@ int ht_table_spec(char *spec)
 
 			LM_DBG("htable [%.*s] - dmqreplicate [%u]\n", name.len, name.s,
 					dmqreplicate);
+		} else if(pit->name.len == 13 && strncmp(pit->name.s, "rollingexpire", 13) == 0) {
+			if(str2int(&tok, &rollingexpire) != 0)
+				goto error;
+
+			LM_DBG("htable [%.*s] - rollingexpire [%u]\n", name.len, name.s, rollingexpire);
 		} else {
 			goto error;
 		}
 	}
 
 	return ht_add_table(&name, autoexpire, &dbtable, &dbcols, size, dbmode,
-			itype, &ival, updateexpire, dmqreplicate);
+			itype, &ival, updateexpire, dmqreplicate, rollingexpire);
 
 error:
 	LM_ERR("invalid htable parameter [%.*s]\n", in.len, in.s);

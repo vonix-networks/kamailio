@@ -110,6 +110,134 @@ static inline int find_first_route(struct sip_msg *_m)
 	}
 }
 
+static int ruri_alias(sip_uri_t *_puri, sip_uri_t *_dsturi)
+{
+	str uri, proto;
+	char buf[MAX_URI_SIZE], uri_buf[MAX_URI_SIZE], *val, *sep, *at, *next, *rest, *port, *trans;
+	unsigned int rest_len, val_len, proto_type, ip_port_len;
+
+	if(_puri->sip_params.len == 0) {
+		LM_DBG("no params\n");
+		return 2;
+	}
+
+	memset(buf, 0, MAX_URI_SIZE);
+	memset(uri_buf, 0, MAX_URI_SIZE);
+
+	memcpy(uri_buf, _puri->sip_params.s, _puri->sip_params.len);
+
+	rest = uri_buf;
+	rest_len = _puri->sip_params.len;
+
+	while(rest_len >= _ksr_contact_alias.len) {
+		if(strncmp(rest, _ksr_contact_alias.s, _ksr_contact_alias.len) == 0)
+			break;
+		sep = memchr(rest, 59 /* ; */, rest_len);
+		if(sep == NULL) {
+			LM_DBG("no alias param\n");
+			return 2;
+		} else {
+			rest_len = rest_len - (sep - rest + 1);
+			rest = sep + 1;
+		}
+	}
+
+	if(rest_len < _ksr_contact_alias.len) {
+		LM_DBG("no alias param\n");
+		return 2;
+	}
+
+	val = rest + _ksr_contact_alias.len;
+	val_len = rest_len - _ksr_contact_alias.len;
+
+	port = memchr(val, 126 /* ~ */, val_len);
+	if(port == NULL) {
+		LM_ERR("no '~' in alias param value\n");
+		return -1;
+	}
+
+	*(port++) = ':';
+
+	trans = memchr(port, 126 /* ~ */, val_len - (port - val));
+	if(trans == NULL) {
+		LM_ERR("no second '~' in alias param value\n");
+		return -1;
+	}
+
+	at = &(buf[0]);
+	append_str(at, "sip:", 4);
+	ip_port_len = trans - val;
+	memcpy(at, val, ip_port_len);
+	at = at + ip_port_len;
+	trans = trans + 1;
+	if((ip_port_len + 2 > val_len) || (*trans == ';') || (*trans == '?')) {
+		LM_ERR("no proto in alias param\n");
+		return -1;
+	}
+	proto_type = *trans - 48 /* char 0 */;
+	if(proto_type != PROTO_UDP) {
+		proto_type_to_str(proto_type, &proto);
+		if(proto.len == 0) {
+			LM_ERR("unknown proto in alias param\n");
+			return -1;
+		}
+		append_str(at, ";transport=", 11);
+		memcpy(at, proto.s, proto.len);
+		at = at + proto.len;
+	}
+	next = trans + 1;
+	if((ip_port_len + 2 < val_len) && (*next != ';') && (*next != '?')) {
+		LM_ERR("invalid alias param value\n");
+		return -1;
+	}
+	uri.s = &(buf[0]);
+	uri.len = at - &(buf[0]);
+
+	if (parse_uri(uri.s, uri.len, _dsturi) < 0) return -1;
+
+	return 0;
+}
+
+/*!
+ * \brief Check if URI is myself with alias handling
+ * \param _host host
+ * \param _port port
+ * \return 0 if the URI is not myself, 1 otherwise
+ */
+static inline int is_ruri_myself(sip_uri_t *_in_puri)
+{
+	int ret;
+	struct sip_uri turi;
+	sip_uri_t *_puri;
+
+	if (ruri_alias(_in_puri, &turi) == 0) {
+		_puri = &turi;
+	} else {
+		_puri = _in_puri;
+	}
+
+	ret = check_self(&_puri->host,
+			_puri->port_no?_puri->port_no:SIP_PORT, 0);/* match all protos*/
+	if (ret < 0) return 0;
+
+#ifdef ENABLE_USER_CHECK
+	if(ret==1 && i_user.len && i_user.len==_puri->user.len
+			&& strncmp(i_user.s, _puri->user.s, _puri->user.len)==0)
+	{
+		LM_DBG("ignore user matched - URI is not to the server itself\n");
+		return 0;
+	}
+#endif
+
+	if(ret==1) {
+		/* match on host:port, but if gruu, then fail */
+		if(_puri->gr.s!=NULL)
+			return 0;
+	}
+
+	return ret;
+}
+
 
 /*!
  * \brief Check if URI is myself
@@ -1050,7 +1178,7 @@ int loose_route_mode(sip_msg_t *_m, int _mode)
 	} else if(ret == 1) {
 		return after_loose(_m, 1);
 	} else {
-		if((_mode == 0) && (is_myself(&_m->parsed_uri))) {
+		if((_mode == 0) && (is_ruri_myself(&_m->parsed_uri))) {
 			return after_strict(_m);
 		} else {
 			return after_loose(_m, 0);

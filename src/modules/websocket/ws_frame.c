@@ -732,7 +732,7 @@ int ws_frame_transmit(sr_event_param_t *evp)
 	frame.payload_data = wsev->buf;
 	frame.wsc = wsconn_get(wsev->id);
 	if(frame.wsc == NULL) {
-		LM_ERR("WebSocket outbound connection not found\n");
+		LM_DBG("WebSocket outbound connection %i not found\n", wsev->id);
 		return -1;
 	}
 
@@ -810,8 +810,10 @@ void ws_keepalive(unsigned int ticks, void *param)
 	while(list_head[i].id != -1) {
 		wsc = wsconn_get(list_head[i].id);
 		if(wsc && wsc->last_used < check_time) {
-			if(wsc->state == WS_S_CLOSING || wsc->awaiting_pong) {
-				LM_WARN("forcibly closing connection\n");
+			if (wsc->state == WS_S_REMOVING) {
+				LM_DBG("wsc state is removing %d\n", wsc->id);
+			} else if (wsc->state == WS_S_CLOSING || wsc->awaiting_pong) {
+				LM_DBG("forcibly closing connection\n");
 				wsconn_close_now(wsc);
 			} else if(ws_keepalive_mechanism == KEEPALIVE_MECHANISM_CONCHECK) {
 				if(wsc->state == WS_S_REMOVING) {
@@ -821,7 +823,7 @@ void ws_keepalive(unsigned int ticks, void *param)
 				} else {
 					tcp_connection_t *con = tcpconn_get(wsc->id, 0, 0, 0, 0);
 					if(con == NULL) {
-						LM_INFO("tcp connection has been lost (id: %d wsc: "
+						LM_DBG("tcp connection has been lost (id: %d wsc: "
 								"%p)\n",
 								wsc->id, wsc);
 						wsc->state = WS_S_CLOSING;

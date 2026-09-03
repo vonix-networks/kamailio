@@ -59,9 +59,6 @@ static int w_msg_iflag_reset(sip_msg_t *msg, char *pflag, char *p2);
 static int w_msg_iflag_is_set(sip_msg_t *msg, char *pflag, char *p2);
 static int w_file_read(sip_msg_t *msg, char *fn, char *vn);
 static int w_file_write(sip_msg_t *msg, char *fn, char *vn);
-static int w_isxflagset(struct sip_msg *msg, char *flag, char *s2);
-static int w_resetxflag(struct sip_msg *msg, char *flag, char *s2);
-static int w_setxflag(struct sip_msg *msg, char *flag, char *s2);
 static int w_set_send_socket(sip_msg_t *msg, char *psock, char *p2);
 static int w_set_send_socket_name(sip_msg_t *msg, char *psock, char *p2);
 static int w_set_recv_socket(sip_msg_t *msg, char *psock, char *p2);
@@ -134,12 +131,6 @@ static cmd_export_t cmds[] = {{"forward_reply", (cmd_function)w_forward_reply,
 				ANY_ROUTE},
 		{"file_write", (cmd_function)w_file_write, 2, fixup_spve_spve,
 				fixup_free_spve_spve, ANY_ROUTE},
-		{"setxflag", (cmd_function)w_setxflag, 1, fixup_igp_null,
-				fixup_free_igp_null, ANY_ROUTE},
-		{"resetxflag", (cmd_function)w_resetxflag, 1, fixup_igp_null,
-				fixup_free_igp_null, ANY_ROUTE},
-		{"isxflagset", (cmd_function)w_isxflagset, 1, fixup_igp_null,
-				fixup_free_igp_null, ANY_ROUTE},
 		{"set_send_socket", (cmd_function)w_set_send_socket, 1, fixup_spve_null,
 				fixup_free_spve_null, ANY_ROUTE},
 		{"set_send_socket_name", (cmd_function)w_set_send_socket_name, 1,
@@ -774,75 +765,6 @@ static int ki_append_branch_uri_q(sip_msg_t *msg, str *uri, str *q)
 /**
  *
  */
-static int ki_isxflagset(sip_msg_t *msg, int fval)
-{
-	if((flag_t)fval > KSR_MAX_XFLAG)
-		return -1;
-	return isxflagset(msg, (flag_t)fval);
-}
-
-/**
- *
- */
-static int w_isxflagset(sip_msg_t *msg, char *flag, char *s2)
-{
-	int fval = 0;
-	if(fixup_get_ivalue(msg, (gparam_t *)flag, &fval) != 0) {
-		LM_ERR("no flag value\n");
-		return -1;
-	}
-	return ki_isxflagset(msg, fval);
-}
-
-/**
- *
- */
-static int ki_resetxflag(sip_msg_t *msg, int fval)
-{
-	if((flag_t)fval > KSR_MAX_XFLAG)
-		return -1;
-	return resetxflag(msg, (flag_t)fval);
-}
-
-/**
- *
- */
-static int w_resetxflag(sip_msg_t *msg, char *flag, char *s2)
-{
-	int fval = 0;
-	if(fixup_get_ivalue(msg, (gparam_t *)flag, &fval) != 0) {
-		LM_ERR("no flag value\n");
-		return -1;
-	}
-	return ki_resetxflag(msg, fval);
-}
-
-/**
- *
- */
-static int ki_setxflag(sip_msg_t *msg, int fval)
-{
-	if((flag_t)fval > KSR_MAX_XFLAG)
-		return -1;
-	return setxflag(msg, (flag_t)fval);
-}
-
-/**
- *
- */
-static int w_setxflag(sip_msg_t *msg, char *flag, char *s2)
-{
-	int fval = 0;
-	if(fixup_get_ivalue(msg, (gparam_t *)flag, &fval) != 0) {
-		LM_ERR("no flag value\n");
-		return -1;
-	}
-	return ki_setxflag(msg, fval);
-}
-
-/**
- *
- */
 static int ki_set_socket_helper(sip_msg_t *msg, str *ssock, int smode, int sfmt)
 {
 	socket_info_t *si;
@@ -1260,21 +1182,6 @@ static sr_kemi_t sr_kemi_corex_exports[] = {
 	{ str_init("corex"), str_init("append_branch_uri_q"),
 		SR_KEMIP_INT, ki_append_branch_uri_q,
 		{ SR_KEMIP_STR, SR_KEMIP_STR, SR_KEMIP_NONE,
-			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }
-	},
-	{ str_init("corex"), str_init("setxflag"),
-		SR_KEMIP_INT, ki_setxflag,
-		{ SR_KEMIP_INT, SR_KEMIP_NONE, SR_KEMIP_NONE,
-			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }
-	},
-	{ str_init("corex"), str_init("resetxflag"),
-		SR_KEMIP_INT, ki_resetxflag,
-		{ SR_KEMIP_INT, SR_KEMIP_NONE, SR_KEMIP_NONE,
-			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }
-	},
-	{ str_init("corex"), str_init("isxflagset"),
-		SR_KEMIP_INT, ki_isxflagset,
-		{ SR_KEMIP_INT, SR_KEMIP_NONE, SR_KEMIP_NONE,
 			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }
 	},
 	{ str_init("corex"), str_init("set_send_socket"),

@@ -92,6 +92,7 @@ pv_spec_t auth_realm_spec;
 pv_spec_t auth_password_spec;
 str uac_default_socket = STR_NULL;
 struct socket_info *uac_default_sockinfo = NULL;
+str reg_xavp_name = str_init("");
 
 str uac_event_callback = STR_NULL;
 
@@ -101,7 +102,8 @@ static int w_replace_to(struct sip_msg *msg, char *p1, char *p2);
 static int w_restore_to(struct sip_msg *msg, char *p1, char *p2);
 static int w_uac_auth(struct sip_msg *msg, char *str, char *str2);
 static int w_uac_auth_mode(struct sip_msg *msg, char *pmode, char *str2);
-static int w_uac_reg_lookup(struct sip_msg *msg, char *src, char *dst);
+static int w_uac_reg_lookup2(struct sip_msg *msg, char *src, char *dst);
+static int w_uac_reg_lookup(struct sip_msg *msg, char *src, char *dst, char *mode_s);
 static int w_uac_reg_lookup_uri(struct sip_msg *msg, char *src, char *dst);
 static int w_uac_reg_status(struct sip_msg *msg, char *src, char *dst);
 static int w_uac_reg_request_to(struct sip_msg *msg, char *src, char *mode_s);
@@ -122,6 +124,28 @@ static pv_export_t mod_pvs[] = {
 		{{0, 0}, 0, 0, 0, 0, 0, 0, 0}};
 
 
+int fixup_uac_lookup(void** param, int param_no)
+{
+	if(param_no==1)
+		return fixup_spve_null(param, 1);
+	if(param_no==2)
+		return fixup_pvar_null(param, 1);
+	if(param_no==3)
+		return fixup_spve_null(param, 1);
+	return E_UNSPEC;
+}
+
+int fixup_free_uac_lookup(void** param, int param_no)
+{
+	if(param_no==1)
+		return fixup_free_spve_null(param, 1);
+	if(param_no==2)
+		return fixup_free_pvar_null(param, 1);
+	if(param_no==3)
+		return fixup_free_spve_null(param, 1);
+	return E_UNSPEC;
+}
+
 /* Exported functions */
 static cmd_export_t cmds[] = {
 		{"uac_replace_from", (cmd_function)w_replace_from, 2, fixup_spve_spve,
@@ -136,16 +160,18 @@ static cmd_export_t cmds[] = {
 				REQUEST_ROUTE | BRANCH_ROUTE},
 		{"uac_restore_to", (cmd_function)w_restore_to, 0, 0, 0, REQUEST_ROUTE},
 		{"uac_auth", (cmd_function)w_uac_auth, 0, 0, 0,
-				FAILURE_ROUTE | BRANCH_FAILURE_ROUTE | EVENT_ROUTE},
+				ANY_ROUTE | FAILURE_ROUTE | BRANCH_FAILURE_ROUTE | EVENT_ROUTE},
 		{"uac_auth", (cmd_function)w_uac_auth_mode, 1, fixup_igp_null,
 				fixup_free_igp_null,
-				FAILURE_ROUTE | BRANCH_FAILURE_ROUTE | EVENT_ROUTE},
+				ANY_ROUTE | FAILURE_ROUTE | BRANCH_FAILURE_ROUTE | EVENT_ROUTE},
 		{"uac_auth_mode", (cmd_function)w_uac_auth_mode, 1, fixup_igp_null,
 				fixup_free_igp_null,
-				FAILURE_ROUTE | BRANCH_FAILURE_ROUTE | EVENT_ROUTE},
+				ANY_ROUTE | FAILURE_ROUTE | BRANCH_FAILURE_ROUTE | EVENT_ROUTE},
 		{"uac_req_send", (cmd_function)w_uac_req_send, 0, 0, 0, ANY_ROUTE},
-		{"uac_reg_lookup", (cmd_function)w_uac_reg_lookup, 2, fixup_spve_pvar,
+		{"uac_reg_lookup", (cmd_function)w_uac_reg_lookup2, 2, fixup_spve_pvar,
 				fixup_free_spve_pvar, ANY_ROUTE},
+		{"uac_reg_lookup", (cmd_function)w_uac_reg_lookup, 3, fixup_uac_lookup,
+				fixup_free_uac_lookup, ANY_ROUTE},
 		{"uac_reg_lookup_uri", (cmd_function)w_uac_reg_lookup_uri, 2,
 				fixup_spve_pvar, fixup_free_spve_pvar, ANY_ROUTE},
 		{"uac_reg_status", (cmd_function)w_uac_reg_status, 1, fixup_spve_null,
@@ -187,6 +213,7 @@ static param_export_t params[] = {
 		{"reg_hash_size", INT_PARAM, &reg_htable_size},
 		{"reg_use_domain", PARAM_INT, &_uac_reg_use_domain},
 		{"default_socket", PARAM_STR, &uac_default_socket},
+		{"reg_xavp_name", PARAM_STR, &reg_xavp_name},
 		{"event_callback", PARAM_STR, &uac_event_callback}, {0, 0, 0}};
 
 
@@ -422,6 +449,7 @@ static int child_init(int rank)
 
 		uac_reg_load_db();
 		LM_DBG("run initial uac registration routine\n");
+		cfg_update();
 		uac_reg_timer(0);
 		for(;;) {
 			/* update the local config framework structures */
@@ -657,10 +685,11 @@ static int ki_uac_auth_mode(sip_msg_t *msg, int mode)
 	return (uac_auth_mode(msg, mode) == 0) ? 1 : -1;
 }
 
-static int w_uac_reg_lookup(struct sip_msg *msg, char *src, char *dst)
+static int w_uac_reg_lookup(struct sip_msg *msg, char *src, char *dst, char *pmode)
 {
 	pv_spec_t *dpv;
 	str sval;
+	int imode = 0;
 
 	if(fixup_get_svalue(msg, (gparam_t *)src, &sval) < 0) {
 		LM_ERR("cannot get the uuid parameter\n");
@@ -669,7 +698,20 @@ static int w_uac_reg_lookup(struct sip_msg *msg, char *src, char *dst)
 
 	dpv = (pv_spec_t *)dst;
 
-	return uac_reg_lookup(msg, &sval, dpv, 0);
+	if (pmode != NULL) {
+		str pmode_s;
+		if(fixup_get_svalue(msg, (gparam_p)pmode, &pmode_s) == 0) {
+			imode = atoi(pmode_s.s);
+		}
+	}
+
+
+	return uac_reg_lookup(msg, &sval, dpv, imode);
+}
+
+static int w_uac_reg_lookup2(struct sip_msg *msg, char *src, char *dst)
+{
+	return w_uac_reg_lookup(msg, src, dst, NULL);
 }
 
 static int ki_uac_reg_lookup(sip_msg_t *msg, str *userid, str *sdst)

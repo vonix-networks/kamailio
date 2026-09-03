@@ -428,13 +428,15 @@ struct _hn_pv_data
 };
 
 static struct _hn_pv_data *_hn_data = NULL;
+static struct hostent* _hn_hostname = NULL;
+static int _hn_hostname_try = 0;
 
 /**
  *
  */
 int hn_pv_data_init(void)
 {
-	char hbuf[512];
+	char hbuf[1024];
 	int hlen;
 	char *d;
 	struct hostent *he;
@@ -443,9 +445,17 @@ int hn_pv_data_init(void)
 	if(_hn_data != NULL)
 		return 0;
 
-	if(gethostname(hbuf, 512) < 0) {
+	if(gethostname(hbuf, 1024) < 0) {
 		LM_WARN("gethostname failed - host pvs will be null\n");
 		return -1;
+	} else {
+		if (_hn_hostname == NULL && _hn_hostname_try == 0) {
+			_hn_hostname = gethostbyname(hbuf);
+			_hn_hostname_try++;
+		}
+		if(_hn_hostname != NULL && _hn_hostname->h_name) {
+			strncpy(hbuf, _hn_hostname->h_name, 1024);
+		}
 	}
 
 	hlen = strlen(hbuf);
