@@ -862,7 +862,13 @@ int mod_register(char *path, int *dlflags, void *p1, void *p2)
 	struct hostent* h;
 	gethostname(hostname, HOST_NAME_MAX+1);
 	h = gethostbyname(hostname);
-	memcpy(hostname, h->h_name, HOST_NAME_MAX+1);
+	if(h != NULL && h->h_name != NULL) {
+		/* canonical name (the FQDN when the resolver knows it) */
+		strncpy(hostname, h->h_name, HOST_NAME_MAX);
+		hostname[HOST_NAME_MAX] = 0;
+	} else {
+		LM_WARN("hostname %s does not resolve, using it as-is for the node name\n", hostname);
+	}
 	dbk_node_hostname.s = hostname;
 	dbk_node_hostname.len = strlen(hostname);
 
