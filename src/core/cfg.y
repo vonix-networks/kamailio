@@ -239,6 +239,7 @@ extern char *default_routename;
 %token ROUTE_BRANCH
 %token ROUTE_SEND
 %token ROUTE_EVENT
+%token ROUTES
 %token EXEC
 %token SET_HOST
 %token SET_HOSTPORT
@@ -285,6 +286,15 @@ extern char *default_routename;
 %token SETFLAG
 %token RESETFLAG
 %token ISFLAGSET
+%token SETBFLAG
+%token RESETBFLAG
+%token ISBFLAGSET
+%token SETXFLAG
+%token RESETXFLAG
+%token ISXFLAGSET
+%token SETSFLAG
+%token RESETSFLAG
+%token ISSFLAGSET
 %token SETAVPFLAG
 %token RESETAVPFLAG
 %token ISAVPFLAGSET
@@ -546,6 +556,9 @@ extern char *default_routename;
 %token HDR_NAME_EXTRA_CHARS
 
 %token FLAGS_DECL
+%token BFLAGS_DECL
+%token XFLAGS_DECL
+%token SFLAGS_DECL
 %token AVPFLAGS_DECL
 
 %token ATTR_MARK
@@ -576,7 +589,7 @@ extern char *default_routename;
 %left BIN_XOR
 %left BIN_LSHIFT
 %left BIN_RSHIFT
-%left EQUAL_T DIFF MATCH INTEQ INTDIFF STREQ STRDIFF
+%left EQUAL_T DIFF MATCH NOMATCH INTEQ INTDIFF STREQ STRDIFF
 %left GT LT GTE LTE
 %left PLUS MINUS
 %left STAR SLASH MODULO
@@ -675,6 +688,9 @@ statement:
 	assign_stm
 	| preprocess_stm
 	| flags_decl
+	| bflags_decl
+	| xflags_decl
+	| sflags_decl
 	| avpflags_decl
 	| module_stm
 	| {rt=REQUEST_ROUTE;} route_stm
@@ -806,6 +822,54 @@ flag_spec:		flag_name	{ if (register_flag($1,-1)<0)
 			|	flag_name COLON NUMBER {
 						if (register_flag($1, $3)<0)
 								yyerror("register flag failed");
+										}
+;
+
+bflags_decl:		BFLAGS_DECL	bflag_list
+			|	BFLAGS_DECL error { yyerror("flag list expected\n"); }
+;
+bflag_list:		bflag_spec
+			|	bflag_spec COMMA bflag_list
+;
+
+bflag_spec:		flag_name	{ if (register_bflag($1,-1)<0)
+								yyerror("register bflag failed");
+						}
+			|	flag_name COLON NUMBER {
+						if (register_bflag($1, $3)<0)
+								yyerror("register bflag failed");
+										}
+;
+
+xflags_decl:		XFLAGS_DECL	xflag_list
+			|	XFLAGS_DECL error { yyerror("flag list expected\n"); }
+;
+xflag_list:		xflag_spec
+			|	xflag_spec COMMA xflag_list
+;
+
+xflag_spec:		flag_name	{ if (register_xflag($1,-1)<0)
+								yyerror("register xflag failed");
+						}
+			|	flag_name COLON NUMBER {
+						if (register_xflag($1, $3)<0)
+								yyerror("register xflag failed");
+										}
+;
+
+sflags_decl:		SFLAGS_DECL	sflag_list
+			|	SFLAGS_DECL error { yyerror("flag list expected\n"); }
+;
+sflag_list:		sflag_spec
+			|	sflag_spec COMMA sflag_list
+;
+
+sflag_spec:		flag_name	{ if (register_sflag($1,-1)<0)
+								yyerror("register sflag failed");
+						}
+			|	flag_name COLON NUMBER {
+						if (register_sflag($1, $3)<0)
+								yyerror("register sflag failed");
 										}
 ;
 
@@ -2581,6 +2645,7 @@ cmpop:
 strop:
 	equalop	{$$=$1; }
 	| MATCH	{$$=MATCH_OP; }
+	| NOMATCH	{$$=NOMATCH_OP; }
 	;
 
 
@@ -2593,6 +2658,7 @@ rve_equalop:
 	| STREQ	{$$=RVE_STREQ_OP; }
 	| STRDIFF {$$=RVE_STRDIFF_OP; }
 	| MATCH	{$$=RVE_MATCH_OP; }
+	| NOMATCH	{$$=RVE_NOMATCH_OP; }
 	;
 rve_cmpop:
 	  GT	{$$=RVE_GT_OP; }
@@ -2847,6 +2913,15 @@ fcmd:
 				case SETFLAG_T:
 				case RESETFLAG_T:
 				case ISFLAGSET_T:
+				case SETBFLAG_T:
+				case RESETBFLAG_T:
+				case ISBFLAGSET_T:
+				case SETXFLAG_T:
+				case RESETXFLAG_T:
+				case ISXFLAGSET_T:
+				case SETSFLAG_T:
+				case RESETSFLAG_T:
+				case ISSFLAGSET_T:
 				case IF_T:
 				case MODULE0_T:
 				case MODULE1_T:
@@ -3665,6 +3740,159 @@ cmd:
 							set_cfg_pos($$);
 									}
 	| ISFLAGSET error { $$=0; yyerror("missing '(' or ')'?"); }
+	| SETBFLAG LPAREN NUMBER RPAREN	{
+							if (check_bflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(SETBFLAG_T, 2, NUMBER_ST, (void*)$3, NUMBER_ST, 0);
+							set_cfg_pos($$);
+									}
+	| SETBFLAG LPAREN flag_name RPAREN	{
+							i_tmp=get_bflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("bflag not declared");
+							$$=mk_action(SETBFLAG_T, 2, NUMBER_ST, (void*)(long)i_tmp, NUMBER_ST, 0);
+							set_cfg_pos($$);
+									}
+	| SETBFLAG LPAREN NUMBER COMMA NUMBER RPAREN	{
+							if (check_bflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(SETBFLAG_T, 2, NUMBER_ST, (void*)$3, NUMBER_ST, (void*)$5);
+							set_cfg_pos($$);
+									}
+	| SETBFLAG LPAREN flag_name COMMA NUMBER RPAREN	{
+							i_tmp=get_bflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("bflag not declared");
+							$$=mk_action(SETBFLAG_T, 2, NUMBER_ST, (void*)(long)i_tmp, NUMBER_ST, (void*)$5);
+							set_cfg_pos($$);
+									}
+	| SETBFLAG error			{ $$=0; yyerror("missing '(' or ')'?"); }
+	| RESETBFLAG LPAREN NUMBER RPAREN {
+							if (check_bflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(RESETBFLAG_T, 2, NUMBER_ST, (void*)$3, NUMBER_ST, 0);
+							set_cfg_pos($$);
+									}
+	| RESETBFLAG LPAREN flag_name RPAREN	{
+							i_tmp=get_bflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("flag not declared");
+							$$=mk_action(RESETBFLAG_T, 2, NUMBER_ST, (void*)(long)i_tmp, NUMBER_ST, 0);
+							set_cfg_pos($$);
+									}
+	| RESETBFLAG LPAREN NUMBER COMMA NUMBER RPAREN {
+							if (check_bflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(RESETBFLAG_T, 2, NUMBER_ST, (void*)$3, NUMBER_ST, (void*)$5);
+							set_cfg_pos($$);
+									}
+	| RESETBFLAG LPAREN flag_name COMMA NUMBER RPAREN	{
+							i_tmp=get_bflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("flag not declared");
+							$$=mk_action(RESETBFLAG_T, 2, NUMBER_ST, (void*)(long)i_tmp, NUMBER_ST, (void*)$5);
+							set_cfg_pos($$);
+									}
+	| RESETBFLAG error		{ $$=0; yyerror("missing '(' or ')'?"); }
+	| ISBFLAGSET LPAREN NUMBER RPAREN {
+							if (check_bflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(ISBFLAGSET_T, 2, NUMBER_ST, (void*)$3, NUMBER_ST, 0);
+							set_cfg_pos($$);
+									}
+	| ISBFLAGSET LPAREN flag_name RPAREN	{
+							i_tmp=get_bflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("flag not declared");
+							$$=mk_action(ISBFLAGSET_T, 2, NUMBER_ST, (void*)(long)i_tmp, NUMBER_ST, 0);
+							set_cfg_pos($$);
+									}
+	| ISBFLAGSET LPAREN NUMBER COMMA NUMBER RPAREN {
+							if (check_bflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(ISBFLAGSET_T, 2, NUMBER_ST, (void*)$3, NUMBER_ST, (void*)$5);
+							set_cfg_pos($$);
+									}
+	| ISBFLAGSET LPAREN flag_name COMMA NUMBER RPAREN	{
+							i_tmp=get_bflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("flag not declared");
+							$$=mk_action(ISBFLAGSET_T, 2, NUMBER_ST, (void*)(long)i_tmp, NUMBER_ST, (void*)$5);
+							set_cfg_pos($$);
+									}
+	| ISBFLAGSET error { $$=0; yyerror("missing '(' or ')'?"); }
+	| SETXFLAG LPAREN NUMBER RPAREN	{
+							if (check_xflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(SETXFLAG_T, 1, NUMBER_ST, (void*)$3);
+							set_cfg_pos($$);
+									}
+	| SETXFLAG LPAREN flag_name RPAREN	{
+							i_tmp=get_xflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("xflag not declared");
+							$$=mk_action(SETXFLAG_T, 1, NUMBER_ST, (void*)(long)i_tmp);
+							set_cfg_pos($$);
+									}
+	| SETXFLAG error			{ $$=0; yyerror("missing '(' or ')'?"); }
+	| RESETXFLAG LPAREN NUMBER RPAREN {
+							if (check_xflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(RESETXFLAG_T, 1, NUMBER_ST, (void*)$3);
+							set_cfg_pos($$);
+									}
+	| RESETXFLAG LPAREN flag_name RPAREN	{
+							i_tmp=get_xflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("xflag not declared");
+							$$=mk_action(RESETXFLAG_T, 1, NUMBER_ST, (void*)(long)i_tmp);
+							set_cfg_pos($$);
+									}
+	| RESETXFLAG error		{ $$=0; yyerror("missing '(' or ')'?"); }
+	| ISXFLAGSET LPAREN NUMBER RPAREN {
+							if (check_xflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(ISXFLAGSET_T, 1, NUMBER_ST, (void*)$3);
+							set_cfg_pos($$);
+									}
+	| ISXFLAGSET LPAREN flag_name RPAREN	{
+							i_tmp=get_xflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("xflag not declared");
+							$$=mk_action(ISXFLAGSET_T, 1, NUMBER_ST, (void*)(long)i_tmp);
+							set_cfg_pos($$);
+									}
+	| ISXFLAGSET error { $$=0; yyerror("missing '(' or ')'?"); }
+	| SETSFLAG LPAREN NUMBER RPAREN	{
+							if (check_sflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(SETSFLAG_T, 1, NUMBER_ST, (void*)$3);
+							set_cfg_pos($$);
+									}
+	| SETSFLAG LPAREN flag_name RPAREN	{
+							i_tmp=get_sflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("sflag not declared");
+							$$=mk_action(SETSFLAG_T, 1, NUMBER_ST, (void*)(long)i_tmp);
+							set_cfg_pos($$);
+									}
+	| SETSFLAG error			{ $$=0; yyerror("missing '(' or ')'?"); }
+	| RESETSFLAG LPAREN NUMBER RPAREN {
+							if (check_sflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(RESETSFLAG_T, 1, NUMBER_ST, (void*)$3);
+							set_cfg_pos($$);
+									}
+	| RESETSFLAG LPAREN flag_name RPAREN	{
+							i_tmp=get_sflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("sflag not declared");
+							$$=mk_action(RESETSFLAG_T, 1, NUMBER_ST, (void*)(long)i_tmp);
+							set_cfg_pos($$);
+									}
+	| RESETSFLAG error		{ $$=0; yyerror("missing '(' or ')'?"); }
+	| ISSFLAGSET LPAREN NUMBER RPAREN {
+							if (check_sflag($3)==-1)
+								yyerror("bad flag value");
+							$$=mk_action(ISSFLAGSET_T, 1, NUMBER_ST, (void*)$3);
+							set_cfg_pos($$);
+									}
+	| ISSFLAGSET LPAREN flag_name RPAREN	{
+							i_tmp=get_sflag_no($3, strlen($3));
+							if (i_tmp<0) yyerror("sflag not declared");
+							$$=mk_action(ISSFLAGSET_T, 1, NUMBER_ST, (void*)(long)i_tmp);
+							set_cfg_pos($$);
+									}
+	| ISSFLAGSET error { $$=0; yyerror("missing '(' or ')'?"); }
 	| avpflag_oper LPAREN attr_id_any_str COMMA flag_name RPAREN {
 		i_tmp=get_avpflag_no($5);
 		if (i_tmp==0) yyerror("avpflag not declared");
@@ -3704,6 +3932,26 @@ cmd:
 	}
 	| ROUTE error { $$=0; yyerror("missing '(' or ')' ?"); }
 	| ROUTE LPAREN error RPAREN { $$=0; yyerror("bad route argument"); }
+	| ROUTES LPAREN rval_expr RPAREN	{
+		if ($3) {
+			$$ = mk_action(ROUTES_T, 1, RVE_ST, (void*)$3);
+			set_cfg_pos($$);
+		} else {
+			$$ = 0;
+			YYERROR;
+		}
+	}
+	| ROUTES LPAREN ID RPAREN	{
+		if ($3) {
+			$$ = mk_action(ROUTES_T, 1, STRING_ST, (void*)$3);
+			set_cfg_pos($$);
+		} else {
+			$$ = 0;
+			YYERROR;
+		}
+	}
+	| ROUTES error { $$=0; yyerror("missing '(' or ')' ?"); }
+	| ROUTES LPAREN error RPAREN { $$=0; yyerror("bad routes argument"); }
 	| EXEC LPAREN STRING RPAREN	{ $$=mk_action(EXEC_T, 1, STRING_ST, $3); set_cfg_pos($$); }
 	| SET_HOST LPAREN STRING RPAREN { $$=mk_action(SET_HOST_T, 1, STRING_ST, $3); set_cfg_pos($$); }
 	| SET_HOST error { $$=0; yyerror("missing '(' or ')' ?"); }

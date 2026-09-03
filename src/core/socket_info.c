@@ -701,6 +701,42 @@ found:
 }
 
 
+/* helper function for grep_sock_info
+ * params:
+ *  host - hostname to compare with
+ *  name - official name
+ *  addr_str - name's resolved ip address converted to string
+ *  ip_addr - name's ip address
+ *  flags - set to SI_IS_IP if name contains an IP
+ *
+ * returns 0 if host matches, -1 if not
+ *
+ * checks from right to left if host.len > name.len
+ */
+inline static int si_hname_cmp_right(str* host, str* name)
+{
+	int idx = host->len - name->len;
+
+	if (idx <= 0) return -1;
+
+	LM_DBG("second try checking advertise if host==us:%d==%d==%d && [%.*s] == [%.*s] == [%.*s]\n",
+			host->len, name->len, idx,
+			host->len, host->s,
+			name->len, (char *) &(host->s[idx]),
+			name->len, name->s
+			);
+
+	if (strncasecmp(&host->s[idx], name->s, name->len)) return -1;
+
+	LM_DBG("success in second try checking advertise if host==us:%d==%d==%d && [%.*s] == [%.*s]\n",
+			host->len, name->len, idx,
+			name->len, (char *) &(host->s[idx]),
+			name->len, name->s
+			);
+
+	return 0;
+}
+
 /* checks if the proto: host:port is one of the address we listen on
  * and returns the corresponding socket_info structure.
  * if port==0, the  port number is ignored
@@ -771,6 +807,11 @@ retry:
 						   &si->useinfo.address_str, &si->useinfo.address,
 						   si->flags)
 						== 0) {
+					goto found;
+				}
+			}
+			if(si->useinfo.name.s != NULL) {
+				if(si_hname_cmp_right(&hname, &si->useinfo.name) == 0) {
 					goto found;
 				}
 			}

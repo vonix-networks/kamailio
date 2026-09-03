@@ -50,6 +50,8 @@
 #include "onsend.h"
 #include "fmsg.h"
 #include "resolve.h"
+#include "mod_fix.h"
+#include "pvar.h"
 #ifdef USE_TCP
 #include "tcp_server.h"
 #endif
@@ -612,6 +614,144 @@ int do_action(struct run_act_ctx *h, struct action *a, struct sip_msg *msg)
 			break;
 			/* jku - end : flag processing */
 
+		case SETBFLAG_T:
+			if (a->val[0].type!=NUMBER_ST) {
+				LM_CRIT("bad setbflag() type %d\n", a->val[0].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (a->val[1].type!=NUMBER_ST) {
+				LM_CRIT("bad setbflag() type %d\n", a->val[1].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (!bflag_in_range( a->val[0].u.number )) {
+				ret=E_CFG;
+				goto error;
+			}
+			setbflag(a->val[1].u.number, a->val[0].u.number);
+			ret=1;
+			break;
+
+		case RESETBFLAG_T:
+			if (a->val[0].type!=NUMBER_ST) {
+				LM_CRIT("bad resetbflag() type %d\n", a->val[0].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (a->val[1].type!=NUMBER_ST) {
+				LM_CRIT("bad resetbflag() type %d\n", a->val[1].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (!bflag_in_range( a->val[0].u.number )) {
+				ret=E_CFG;
+				goto error;
+			}
+			resetbflag(a->val[1].u.number, a->val[0].u.number );
+			ret=1;
+			break;
+
+		case ISBFLAGSET_T:
+			if (a->val[0].type!=NUMBER_ST) {
+				LM_CRIT("bad isbflagset() type %d\n", a->val[0].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (a->val[1].type!=NUMBER_ST) {
+				LM_CRIT("bad isbflagset() type %d\n", a->val[1].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (!bflag_in_range( a->val[0].u.number )) {
+				ret=E_CFG;
+				goto error;
+			}
+			ret=isbflagset(a->val[1].u.number, a->val[0].u.number );
+			break;
+
+		case SETXFLAG_T:
+			if (a->val[0].type!=NUMBER_ST) {
+				LM_CRIT("bad setxflag() type %d\n", a->val[0].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (!xflag_in_range( a->val[0].u.number )) {
+				ret=E_CFG;
+				goto error;
+			}
+			setxflag( msg, a->val[0].u.number );
+			ret=1;
+			break;
+
+		case RESETXFLAG_T:
+			if (a->val[0].type!=NUMBER_ST) {
+				LM_CRIT("bad resetxflag() type %d\n", a->val[0].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (!xflag_in_range( a->val[0].u.number )) {
+				ret=E_CFG;
+				goto error;
+			}
+			resetxflag( msg, a->val[0].u.number );
+			ret=1;
+			break;
+
+		case ISXFLAGSET_T:
+			if (a->val[0].type!=NUMBER_ST) {
+				LM_CRIT("bad isxflagset() type %d\n", a->val[0].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (!xflag_in_range( a->val[0].u.number )) {
+				ret=E_CFG;
+				goto error;
+			}
+			ret=isxflagset( msg, a->val[0].u.number );
+			break;
+
+		case SETSFLAG_T:
+			if (a->val[0].type!=NUMBER_ST) {
+				LM_CRIT("bad setsflag() type %d\n", a->val[0].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (!sflag_in_range( a->val[0].u.number )) {
+				ret=E_CFG;
+				goto error;
+			}
+			setsflag(a->val[0].u.number );
+			ret=1;
+			break;
+
+		case RESETSFLAG_T:
+			if (a->val[0].type!=NUMBER_ST) {
+				LM_CRIT("bad resetsflag() type %d\n", a->val[0].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (!sflag_in_range( a->val[0].u.number )) {
+				ret=E_CFG;
+				goto error;
+			}
+			resetsflag(a->val[0].u.number );
+			ret=1;
+			break;
+
+		case ISSFLAGSET_T:
+			if (a->val[0].type!=NUMBER_ST) {
+				LM_CRIT("bad issflagset() type %d\n", a->val[0].type );
+				ret=E_BUG;
+				goto error;
+			}
+			if (!sflag_in_range( a->val[0].u.number )) {
+				ret=E_CFG;
+				goto error;
+			}
+			ret=issflagset(a->val[0].u.number );
+			break;
+
 		case AVPFLAG_OPER_T:
 			ret = 0;
 			if((a->val[0].u.attr->type & AVP_INDEX_ALL) == AVP_INDEX_ALL
@@ -711,6 +851,84 @@ int do_action(struct run_act_ctx *h, struct action *a, struct sip_msg *msg)
 			_last_returned_code = h->last_retcode;
 			h->run_flags &=
 					~(RETURN_R_F | BREAK_R_F); /* absorb return & break */
+			break;
+		case ROUTES_T:
+			ret = 1;
+			struct run_act_ctx ctx;
+			if (likely(a->val[0].type == ROUTE_LIST)) {
+				long *route = (long *) a->val[0].u.data;
+				while (*route != 0) {
+					int r;
+					init_run_actions_ctx(&ctx);
+					r = run_actions(&ctx, main_rt.rlist[*route], msg);
+					if (ctx.run_flags & (EXIT_R_F | DROP_R_F)) {
+						h->run_flags = ctx.run_flags;
+						ret = r;
+						break;
+					}
+					route++;
+				}
+			} else if (a->val[0].type == RVE_ST) {
+				struct str_hash_entry* e;
+				int x;
+				rv = rval_expr_eval(h, msg, a->val[0].u.data);
+				rval_cache_init(&c1);
+				if (unlikely(rv == 0 || rval_get_tmp_str(h, msg, &s, rv, 0, &c1) < 0)) {
+					rval_destroy(rv);
+					rval_cache_clean(&c1);
+					ERR("failed to convert RVE to string\n");
+					ret = E_UNSPEC;
+					goto error;
+				}
+				rval_destroy(rv);
+				rval_cache_clean(&c1);
+				for (x = 0; x < main_rt.names.size; x++) {
+					clist_foreach(&main_rt.names.table[x], e, next) {
+						if (e->key.len > s.len && !strncasecmp(e->key.s, s.s, s.len)) {
+							int r;
+							init_run_actions_ctx(&ctx);
+							r = run_actions(&ctx, main_rt.rlist[e->u.n], msg);
+							if (ctx.run_flags & (EXIT_R_F | DROP_R_F)) {
+								h->run_flags = ctx.run_flags;
+								ret = r;
+								break;
+							}
+						}
+					}
+				}
+				s.s = 0;
+			} else if (a->val[0].type == EXPR_ST) {
+				struct str_hash_entry* e;
+				int x;
+				gparam_p p = (gparam_p) a->val[0].u.data;
+				if (fixup_get_svalue(msg, (gparam_p) p, &s) != 0) {
+					LM_ERR("invalid route parameter\n");
+					ret = E_UNSPEC;
+					goto error;
+				}
+				for (x = 0; x < main_rt.names.size; x++) {
+					clist_foreach(&main_rt.names.table[x], e, next) {
+						if (e->key.len > s.len && !strncasecmp(e->key.s, s.s, s.len)) {
+							int r;
+							init_run_actions_ctx(&ctx);
+							r = run_actions(&ctx, main_rt.rlist[e->u.n], msg);
+							if (ctx.run_flags & (EXIT_R_F | DROP_R_F)) {
+								h->run_flags = ctx.run_flags;
+								ret = r;
+								break;
+							}
+						}
+					}
+				}
+				s.s = 0;
+			} else {
+				LM_CRIT("bad route() type %d\n", a->val[0].type);
+				ret=E_BUG;
+				goto error;
+			}
+			h->last_retcode=ret;
+			_last_returned_code = h->last_retcode;
+			h->run_flags&=~(RETURN_R_F|BREAK_R_F); /* absorb return & break */
 			break;
 		case EXEC_T:
 			if(a->val[0].type != STRING_ST) {
@@ -1417,24 +1635,52 @@ int do_action(struct run_act_ctx *h, struct action *a, struct sip_msg *msg)
 			ret = 1; /* continue processing */
 			break;
 		case SET_ADV_ADDR_T:
+		{
+			str eval = STR_NULL;
+			str arg = STR_NULL;
 			if(a->val[0].type != STR_ST) {
 				LM_CRIT("bad set_advertised_address() type %d\n",
 						a->val[0].type);
 				ret = E_BUG;
 				goto error;
 			}
-			msg->set_global_address = *((str *)a->val[0].u.data);
-			ret = 1; /* continue processing */
+			arg = *((str *)a->val[0].u.data);
+			if(pv_eval_str(msg, &eval, &arg) != 1) {
+				LM_CRIT("bad set_advertised_address(%.*s) evaluation", arg.len, arg.s);
+				ret = E_SCRIPT;
+				goto error;
+			} else {
+				if(set_global_address(msg, &eval) != 0) {
+					ret = E_OUT_OF_MEM;
+					goto error;
+				}
+			}
+			ret = 1;
 			break;
+		}
 		case SET_ADV_PORT_T:
+		{
+			str eval = STR_NULL;
+			str arg = STR_NULL;
 			if(a->val[0].type != STR_ST) {
 				LM_CRIT("bad set_advertised_port() type %d\n", a->val[0].type);
 				ret = E_BUG;
 				goto error;
 			}
-			msg->set_global_port = *((str *)a->val[0].u.data);
-			ret = 1; /* continue processing */
+			arg = *((str *)a->val[0].u.data);
+			if(pv_eval_str(msg, &eval, &arg) != 1) {
+				LM_CRIT("bad set_advertised_port(%.*s) evaluation", arg.len, arg.s);
+				ret = E_SCRIPT;
+				goto error;
+			} else {
+				if(set_global_port(msg, &eval) != 0) {
+					ret = E_OUT_OF_MEM;
+					goto error;
+				}
+			}
+			ret = 1;
 			break;
+		}
 #ifdef USE_TCP
 		case FORCE_TCP_ALIAS_T:
 			if(msg->rcv.proto == PROTO_TCP
