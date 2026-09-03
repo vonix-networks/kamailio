@@ -25,18 +25,27 @@
  * --------
  * 2014-08  first version (2600hz)
  */
+#ifndef KZ_AMQP_UTIL_H
+#define KZ_AMQP_UTIL_H
 
-#ifndef KZ_HASH_H
-#define KZ_HASH_H
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <fcntl.h>
+#include "../../core/mem/mem.h"
+#include "../../core/pvar.h"
+#include "../../core/mod_fix.h"
+#include "../../core/lvalue.h"
+#include "../../core/route.h"
+#include "../../core/receive.h"
+#include "../../core/action.h"
+#include "../../core/script_cb.h"
 
-#include "../../core/lock_ops.h"
-#include "kz_amqp.h"
 
-int kz_hash_init();
-void kz_hash_destroy();
+int set_non_blocking(int fd);
 
-int kz_cmd_store(kz_amqp_cmd_ptr cmd);
-kz_amqp_cmd_ptr kz_cmd_retrieve(str *message_id);
-
+void kz_amqp_util_encode(const str * key, char *pdest);
+int kz_amqp_encode_ex(str* unencoded, pv_value_p dst_val);
+int kz_amqp_encode(struct sip_msg* msg, char* unencoded, char* encoded);
 
 #endif
