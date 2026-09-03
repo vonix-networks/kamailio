@@ -818,7 +818,7 @@ static inline int update_contacts(struct sip_msg *_m, urecord_t *_r, int _mode,
 						while(ptr) {
 							ptr0 = ptr->next;
 							if ((ptr != c) && (ptr->callid.len != c->callid.len || strncmp(ptr->callid.s, c->callid.s, ptr->callid.len))) {
-								ul.delete_ucontact(_r, ptr);
+								_reg_ul.delete_ucontact(_r, ptr);
 							}
 							ptr = ptr0;
 						}
