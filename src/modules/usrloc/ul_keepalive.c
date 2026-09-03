@@ -138,6 +138,9 @@ int ul_ka_urecord(urecord_t *ur)
 		if(uc->c.len <= 0) {
 			continue;
 		}
+		if(!uc->keepalive) {
+			continue;
+		}
 		if((ul_ka_filter & GAU_OPT_SERVER_ID) && (uc->server_id != server_id)) {
 			continue;
 		}

@@ -453,7 +453,7 @@ int consume_credentials(struct sip_msg *msg)
 	if(!h) {
 		get_authorized_cred(msg->proxy_auth, &h);
 		if(!h) {
-			LM_ERR("No authorized credentials found (error in scripts)\n");
+			LM_DBG("No authorized credentials found (error in scripts)\n");
 			return -1;
 		}
 	}

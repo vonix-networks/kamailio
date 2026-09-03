@@ -45,6 +45,7 @@
 #include "../../core/parser/parse_uri.h"
 #include "../../core/parser/parse_from.h"
 #include "../../core/parser/parse_param.h"
+#include "../../core/receive.h"
 #include "../../core/xavp.h"
 #include "../../core/parser/digest/digest.h"
 #include "../../core/resolve.h"
@@ -123,6 +124,7 @@ extern int ds_retain_latency_stats;
 extern float ds_latency_estimator_alpha;
 extern int ds_attrs_none;
 extern param_t *ds_db_extra_attrs_list;
+extern int ds_rehash_max;
 extern int ds_load_mode;
 extern uint32_t ds_dns_mode;
 extern int ds_dns_ttl;
@@ -148,7 +150,7 @@ static sruid_t _ds_sruid = {0};
 
 void ds_rctx_set_uri(ds_rctx_t *rctx, str *uri);
 static void ds_run_route(
-		struct sip_msg *msg, str *uri, char *route, ds_rctx_t *rctx);
+		struct sip_msg *msg, ds_set_t *set, int pos, char *route, ds_rctx_t *rctx);
 
 void shuffle_uint100array(unsigned int *arr);
 void shuffle_char100array(char *arr);
@@ -430,6 +432,9 @@ int ds_set_attrs(ds_dest_t *dest, str *vattrs)
 		} else if(pit->name.len == 6
 				  && strncasecmp(pit->name.s, "ocrate", 6) == 0) {
 			str2int(&pit->body, &dest->ocdata.ocrate);
+		} else if(pit->name.len == 12
+				&& strncasecmp(pit->name.s, "ping_headers", 12) == 0) {
+			dest->attrs.ping_headers = pit->body;
 		}
 	}
 	if(dest->ocdata.ocmax > 100) {
@@ -1331,6 +1336,10 @@ int ds_reload_db(void)
 		ret = 0;
 	}
 	ds_disconnect_db();
+
+	if (ret == 0) {
+		ds_run_route(NULL, NULL, 0, "dispatcher:reloaded", NULL);
+	}
 
 	return ret;
 }
@@ -2829,6 +2838,9 @@ int ds_manage_routes(
 	int vlast = 0;
 	int valg = 0;
 	int xavp_filled = 0;
+	int maxRehash = 0;
+	int fullHash;
+	int listSize;
 
 	if(msg == NULL) {
 		LM_ERR("bad parameters\n");
@@ -2873,24 +2885,32 @@ int ds_manage_routes(
 				LM_ERR("can't get callid hash\n");
 				return -1;
 			}
+			maxRehash = ds_rehash_max;
+			fullHash = hash;
 			break;
 		case DS_ALG_HASHFROMURI: /* 1 - hash from-uri */
 			if(ds_hash_fromuri(msg, &hash) != 0) {
 				LM_ERR("can't get From uri hash\n");
 				return -1;
 			}
+			maxRehash = ds_rehash_max;
+			fullHash = hash;
 			break;
 		case DS_ALG_HASHTOURI: /* 2 - hash to-uri */
 			if(ds_hash_touri(msg, &hash) != 0) {
 				LM_ERR("can't get To uri hash\n");
 				return -1;
 			}
+			maxRehash = ds_rehash_max;
+			fullHash = hash;
 			break;
 		case DS_ALG_HASHRURI: /* 3 - hash r-uri */
 			if(ds_hash_ruri(msg, &hash) != 0) {
 				LM_ERR("can't get ruri hash\n");
 				return -1;
 			}
+			maxRehash = ds_rehash_max;
+			fullHash = hash;
 			break;
 		case DS_ALG_ROUNDROBIN: /* 4 - round robin */
 			lock_get(&idx->lock);
@@ -2919,6 +2939,8 @@ int ds_manage_routes(
 					LM_ERR("can't get authorization hash\n");
 					return -1;
 			}
+			maxRehash = ds_rehash_max;
+			fullHash = hash;
 			break;
 		case DS_ALG_RANDOM: /* 6 - random selection */
 			hash = ksr_xrand();
@@ -2928,6 +2950,8 @@ int ds_manage_routes(
 				LM_ERR("can't get PV hash\n");
 				return -1;
 			}
+			maxRehash = ds_rehash_max;
+			fullHash = hash;
 			break;
 		case DS_ALG_SERIAL: /* 8 - use always first entry */
 			hash = 0;
@@ -3001,19 +3025,49 @@ int ds_manage_routes(
 	LM_DBG("using alg [%d] hash [%u]\n", rstate->alg, hash);
 
 	if(ds_use_default != 0 && idx->nr != 1)
-		hash = hash % (idx->nr - 1);
+		listSize = idx->nr - 1;
 	else
-		hash = hash % idx->nr;
+		listSize = idx->nr;
+	hash = hash % listSize;
 	i = hash;
 
-	/* if selected address is inactive, find next active */
+	if ( maxRehash < 0 ) {
+		if(ds_use_default != 0 )
+			maxRehash = listSize - 1;
+		else
+			maxRehash = listSize;
+	}
+
+	/* if selected address is inactive (or skipped by overload control), find one active */
+
 	while(!xavp_filled
 			&& (ds_skip_dst(idx->dlist[i].flags)
 					|| ds_oc_skip(idx, rstate->alg, i))) {
-		if(ds_use_default != 0 && idx->nr != 1)
-			i = (i + 1) % (idx->nr - 1);
-		else
-			i = (i + 1) % idx->nr;
+		/* if alg was a hash, it should try to rehash first, and at most maxRehash times*/
+		if ( maxRehash > 0 ) {
+			char fullhashStr[3*sizeof(int) + 2];
+			do
+			{
+				str cid;
+				cid.len = snprintf (fullhashStr, sizeof(fullhashStr), "%d", fullHash );
+				if ( cid.len >= sizeof(fullhashStr))
+				{
+					cid.len = sizeof(fullhashStr);
+				}
+				cid.s = fullhashStr;
+				fullHash = ds_get_hash(&cid, NULL);
+				maxRehash--;
+			}
+			while (( maxRehash > 0 ) && ds_skip_dst(idx->dlist[fullHash % listSize].flags ) );
+			if ( ds_skip_dst(idx->dlist[fullHash % listSize].flags ) )  /* Acts as if no rehash had been done */
+			   /* original implementaion : find next active */
+				i = (i + 1) % listSize;
+			else
+				i = fullHash % listSize;
+		}
+		else /* original implementaion : find next active */
+			i = (i + 1) % listSize;
+
 		if(i == hash) {
 			/* back to start -- looks like no active dst */
 			if(ds_use_default != 0) {
@@ -3774,18 +3828,20 @@ int ds_update_state(sip_msg_t *msg, int group, str *address, str *iuid,
 					|| ((mode & DS_STATE_MODE_FUNC) == 0)) {
 				was_down = ds_skip_dst(old_state);
 				is_down = ds_skip_dst(idx->dlist[i].flags);
+				/* 2600hz: the event route gets the set/position so that
+				 * it sees the destination as R-URI and in $xavp(ds_dst) */
 				if(ds_event_callback_mode == DS_EVRTMODE_INIT) {
 					if((!was_down && is_down) || (old_state == 0 && is_down)) {
-						ds_run_route(msg, address, "dispatcher:dst-down", rctx);
+						ds_run_route(msg, idx, i, "dispatcher:dst-down", rctx);
 					} else if((was_down && !is_down)
 							  || (old_state == 0 && !is_down)) {
-						ds_run_route(msg, address, "dispatcher:dst-up", rctx);
+						ds_run_route(msg, idx, i, "dispatcher:dst-up", rctx);
 					}
 				} else {
 					if(!was_down && is_down) {
-						ds_run_route(msg, address, "dispatcher:dst-down", rctx);
+						ds_run_route(msg, idx, i, "dispatcher:dst-down", rctx);
 					} else if(was_down && !is_down) {
-						ds_run_route(msg, address, "dispatcher:dst-up", rctx);
+						ds_run_route(msg, idx, i, "dispatcher:dst-up", rctx);
 					}
 				}
 			}
@@ -3839,13 +3895,15 @@ ds_rctx_t *ds_get_rctx(void)
 	return _ds_rctx;
 }
 
-static void ds_run_route(sip_msg_t *msg, str *uri, char *route, ds_rctx_t *rctx)
+static void ds_run_route(sip_msg_t *msg, ds_set_t *set, int pos, char *route, ds_rctx_t *rctx)
 {
 	int rt, backup_rt;
 	struct run_act_ctx ctx;
 	sip_msg_t *fmsg = NULL;
+	int faked = 0;
 	sr_kemi_eng_t *keng = NULL;
 	str evname;
+	sr_xavp_t *xavp = NULL;
 
 	if(route == NULL) {
 		LM_ERR("bad route\n");
@@ -3870,38 +3928,56 @@ static void ds_run_route(sip_msg_t *msg, str *uri, char *route, ds_rctx_t *rctx)
 		}
 	}
 
-	if(faked_msg_init() < 0) {
-		LM_ERR("faked_msg_init() failed\n");
-		return;
-	}
-	fmsg = faked_msg_next();
-	if(rewrite_uri(fmsg, uri) < 0) {
-		LM_ERR("failed to set r-uri\n");
-		return;
+	/* 2600hz: the event route runs with the destination as R-URI and its
+	 * dispatcher record in $xavp(ds_dst) when a set/position is given */
+	if(msg == NULL) {
+		if(faked_msg_init() < 0) {
+			LM_ERR("faked_msg_init() failed\n");
+			return;
+		}
+		fmsg = faked_msg_next();
+		faked = 1;
+		if(set != NULL) {
+			if(rewrite_uri(fmsg, &set->dlist[pos].uri) < 0) {
+				LM_ERR("failed to set r-uri\n");
+				return;
+			}
+		}
+	} else {
+		fmsg = msg;
 	}
 
 	if(rt >= 0 || ds_event_callback.len > 0) {
+		if(set != NULL) {
+			ds_add_xavp_record(set, pos, set->id, 0, &xavp);
+		}
 		_ds_rctx = rctx;
 		backup_rt = get_route_type();
-		set_route_type(REQUEST_ROUTE);
-		init_run_actions_ctx(&ctx);
-		if(rt >= 0) {
-			run_top_route(event_rt.rlist[rt], fmsg, 0);
-		} else {
-			if(keng != NULL) {
-				evname.s = route;
-				evname.len = strlen(evname.s);
-				if(sr_kemi_route(
-						   keng, fmsg, EVENT_ROUTE, &ds_event_callback, &evname)
-						< 0) {
-					LM_ERR("error running event route kemi callback\n");
+		set_route_type(ONEVENT_ROUTE);
+		if(exec_pre_script_cb(fmsg, EVENT_CB_TYPE) != 0) {
+			init_run_actions_ctx(&ctx);
+			if(rt >= 0) {
+				run_top_route(event_rt.rlist[rt], fmsg, 0);
+			} else {
+				if(keng != NULL) {
+					evname.s = route;
+					evname.len = strlen(evname.s);
+					if(sr_kemi_route(
+							   keng, fmsg, EVENT_ROUTE, &ds_event_callback, &evname)
+							< 0) {
+						LM_ERR("error running event route kemi callback\n");
+					}
 				}
 			}
+			exec_post_script_cb(fmsg, EVENT_CB_TYPE);
 		}
+		ksr_msg_env_reset();
 		set_route_type(backup_rt);
 		_ds_rctx = NULL;
 	}
-	reset_uri(fmsg);
+	if(faked) {
+		reset_uri(fmsg);
+	}
 }
 
 
@@ -4240,6 +4316,15 @@ int ds_is_addr_from_set(sip_msg_t *_m, struct ip_addr *pipaddr,
 					ds_strictest_idx = j;
 				}
 				continue;
+			}
+			if(ds_uri_pvname.s != 0 && node->dlist[j].uri.len > 0) {
+				memset(&val, 0, sizeof(pv_value_t));
+				val.flags = PV_VAL_STR;
+				val.rs = node->dlist[j].uri;
+				if(ds_uri_pv.setf(_m, &ds_uri_pv.pvp, (int)EQ_T, &val) < 0) {
+					LM_ERR("setting uri pv failed\n");
+					return -3;
+				}
 			}
 
 			return ds_set_vars(_m, node, j, export_set_pv);
@@ -4595,6 +4680,7 @@ void ds_ping_set(ds_set_t *node)
 	ds_rctx_t rctx;
 	char ftbuf[64];
 	str ftag;
+	str ping_headers;
 
 	if(!node)
 		return;
@@ -4673,6 +4759,16 @@ void ds_ping_set(ds_set_t *node)
 			} else {
 				ftag.s = ftbuf;
 				uac_r.fromtag = &ftag;
+			}
+
+			/* Overwrite ping headers From URI with attribute */
+			if(node->dlist[j].attrs.ping_headers.s != NULL
+					&& node->dlist[j].attrs.ping_headers.len > 0) {
+				ping_headers = node->dlist[j].attrs.ping_headers;
+				uac_r.headers = &ping_headers;
+				LM_DBG("ping_headers: %.*s\n", ping_headers.len, ping_headers.s);
+			} else {
+				uac_r.headers = NULL;
 			}
 
 			gettimeofday(&node->dlist[j].latency_stats.start, NULL);

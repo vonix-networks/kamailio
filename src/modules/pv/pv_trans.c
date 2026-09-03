@@ -1555,11 +1555,12 @@ int tr_eval_string(
 					}
 				}
 			} else {
-				for(i = val->rs.len - 1; i >= 0; i++) {
+				for(i = val->rs.len - 1; i >= 0; i--) {
 					if(val->rs.s[i] == st.s[0]) {
 						break;
 					}
 				}
+				if (i < 0) i = val->rs.len;
 			}
 
 			if(i == 0) {
@@ -2014,7 +2015,7 @@ int tr_eval_uri(
 			}
 			break;
 		case TR_URI_TOSOCKET:
-			if(get_valid_proto_string(_tr_parsed_uri.proto, 1, 0, &sproto)
+			if(get_valid_proto_string(_tr_parsed_uri.proto, 0, 0, &sproto)
 					< 0) {
 				LM_WARN("unknown transport protocol\n");
 				val->rs = _tr_empty;

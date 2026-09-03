@@ -81,6 +81,7 @@ int bind_usrloc(usrloc_api_t *api)
 	api->use_domain = ul_use_domain;
 	api->db_mode = ul_db_mode;
 	api->nat_flag = ul_nat_bflag;
+	api->ka_flag = ul_ka_flag;
 
 	return 0;
 }

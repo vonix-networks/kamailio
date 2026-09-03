@@ -85,6 +85,7 @@ static int dbg_pkg_summary(struct sip_msg *, char *, char *);
 static int dbg_shm_summary(struct sip_msg *, char *, char *);
 static int w_route_exists(struct sip_msg *, char *);
 static int w_check_route_exists(struct sip_msg *, char *);
+static int w_routes(struct sip_msg *, char *);
 
 static int set_gflag(struct sip_msg *, char *, char *);
 static int reset_gflag(struct sip_msg *, char *, char *);
@@ -170,6 +171,8 @@ static cmd_export_t cmds[]={
 	{"check_route_exists", (cmd_function)w_check_route_exists, 1, fixup_spve_null, fixup_free_spve_null,
 		ANY_ROUTE},
 	{"route_if_exists",    (cmd_function)w_route_exists, 1, fixup_spve_null, fixup_free_spve_null,
+		ANY_ROUTE},
+	{"xroutes",            (cmd_function)w_routes, 1, fixup_spve_null, fixup_free_spve_null,
 		ANY_ROUTE},
 	{"bind_cfgutils",      (cmd_function)bind_cfgutils, 0, 0, 0, 0},
 	{0, 0, 0, 0, 0, 0}
@@ -870,6 +873,49 @@ static int w_route_exists(struct sip_msg *msg, char *route)
 	}
 
 	return ki_route_if_exists(msg, &s);
+}
+
+
+/*! Run all routes by name prefix
+ */
+static int ki_routes(sip_msg_t *msg, str *route)
+{
+	struct run_act_ctx ctx;
+	int ret = 1, h;
+	struct str_hash_entry* e;
+
+	if(route == NULL || route->s == NULL) {
+		return -1;
+	}
+
+	init_run_actions_ctx(&ctx);
+
+	for (h = 0; h < main_rt.names.size; h++) {
+		clist_foreach(&main_rt.names.table[h], e, next) {
+			if (e->key.len > route->len && !strncasecmp(e->key.s, route->s, route->len)) {
+				ret = run_actions(&ctx, main_rt.rlist[e->u.n], msg);
+				if (ctx.run_flags & EXIT_R_F) {
+					return 0;
+				}
+			}
+		}
+	}
+
+	return ret;
+}
+
+/*! Run all routes by name prefix
+ */
+static int w_routes(struct sip_msg *msg, char *route)
+{
+	str s;
+
+	if (fixup_get_svalue(msg, (gparam_p) route, &s) != 0) {
+			LM_ERR("invalid route parameter\n");
+			return -1;
+	}
+
+	return ki_routes(msg, &s);
 }
 
 static int mod_init(void)

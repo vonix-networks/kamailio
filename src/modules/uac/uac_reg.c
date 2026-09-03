@@ -69,7 +69,7 @@ static reg_ht_t *_reg_htable = NULL;
 static reg_ht_t *_reg_htable_gc = NULL;
 static gen_lock_t *_reg_htable_gc_lock = NULL;
 
-int _uac_reg_use_domain = 0;
+int _uac_reg_use_domain = 1;
 int reg_timer_interval = 90;
 int reg_retry_interval = 0;
 int reg_htable_size = 4;
@@ -1594,7 +1594,7 @@ int uac_reg_request_to(struct sip_msg *msg, str *src, unsigned int mode)
 		case 1:
 			if(_uac_reg_use_domain) {
 				if(parse_uri(src->s, src->len, &puri) != 0) {
-					LM_ERR("failed to parse uri\n");
+					LM_ERR("failed to parse uri %.*s\n", src->len, src->s);
 					return -2;
 				}
 				reg = reg_ht_get_byuser(&puri.user, &puri.host);
