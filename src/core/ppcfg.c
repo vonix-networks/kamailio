@@ -51,6 +51,15 @@ static pp_subst_rule_t *pp_subst_rules_tail = NULL;
 static int _pp_ifdef_level = 0;
 static str_list_t *_ksr_substdef_strlist = NULL;
 
+#define STR_BUF_ALLOC_UNIT	128
+struct pp_str_buf{
+	char* s;
+	char* crt;
+	int left;
+};
+
+static struct pp_str_buf pp_s_buf;
+
 int pp_def_qvalue(str *defval, str *outval)
 {
 	str newval;
@@ -77,11 +86,53 @@ int pp_def_qvalue(str *defval, str *outval)
 	return 0;
 }
 
+static char* pp_addstr(struct pp_str_buf* dst_b, char* src, int len)
+{
+	char *tmp = NULL;
+	unsigned size;
+	unsigned used;
+
+	if (dst_b->left<(len+1)){
+		used=(unsigned)(dst_b->crt-dst_b->s);
+		size=used+len+1;
+		/* round up to next multiple */
+		size+= STR_BUF_ALLOC_UNIT-size%STR_BUF_ALLOC_UNIT;
+		tmp=pkg_malloc(size);
+		if (tmp==0) goto error;
+		if (dst_b->s){
+			memcpy(tmp, dst_b->s, used);
+			pkg_free(dst_b->s);
+		}
+		dst_b->s=tmp;
+		dst_b->crt=dst_b->s+used;
+		dst_b->left=size-used;
+	}
+	if(dst_b->crt==NULL) {
+		LM_CRIT("unexpected null dst buffer\n");
+	}
+	memcpy(dst_b->crt, src, len);
+	dst_b->crt+=len;
+	*(dst_b->crt)=0;
+	dst_b->left-=len;
+
+	return dst_b->s;
+error:
+	PKG_MEM_CRITICAL;
+	return NULL;
+}
+
 int pp_subst_add(char *data)
 {
 	struct subst_expr *se;
 	str subst;
 	pp_subst_rule_t *pr;
+	char *tofree = NULL;
+
+	memset(&pp_s_buf, 0, sizeof(pp_s_buf));
+	pp_addstr(&pp_s_buf, data, strlen(data));
+	if (pp_subst_run(&pp_s_buf.s) > 0) {
+		data = tofree = pp_s_buf.s;
+	};
 
 	subst.s = data;
 	subst.len = strlen(subst.s);
@@ -90,6 +141,7 @@ int pp_subst_add(char *data)
 		return -1;
 	pr = (pp_subst_rule_t *)pkg_malloc(sizeof(pp_subst_rule_t));
 	if(pr == NULL) {
+		if (tofree) pkg_free(tofree);
 		PKG_MEM_ERROR;
 		return -1;
 	}
@@ -99,6 +151,7 @@ int pp_subst_add(char *data)
 	if(se == 0) {
 		LM_ERR("bad subst expression: %s\n", data);
 		pkg_free(pr);
+		if (tofree) pkg_free(tofree);
 		return -2;
 	}
 	pr->indata = data;
@@ -111,6 +164,8 @@ int pp_subst_add(char *data)
 	pp_subst_rules_tail = pr;
 
 	LM_DBG("### added subst expression: [%s]\n", data);
+
+	if (tofree) pkg_free(tofree);
 
 	return 0;
 }
@@ -176,6 +231,14 @@ found_repl:
 	if(memchr(defvalue.s, '$', defvalue.len) != NULL) {
 		fmsg = faked_msg_get_next();
 		if(pv_eval_str(fmsg, &newval, &defvalue) >= 0) {
+			LM_DBG("### evaluated %.*s => %.*s => %.*s\n",
+				defname.len,
+				defname.s,
+				defvalue.len,
+				defvalue.s,
+				newval.len,
+				newval.s
+				);
 			if(mode != KSR_PPDEF_QUOTED) {
 				sb = str_list_block_add(
 						&_ksr_substdef_strlist, newval.s, newval.len);
@@ -187,6 +250,14 @@ found_repl:
 			} else {
 				defvalue = newval;
 			}
+		} else {
+			LM_BUG("### error evaluating %.*s => %.*s\n",
+				defname.len,
+				defname.s,
+				defvalue.len,
+				defvalue.s
+				);
+				return -1;
 		}
 	}
 	if(mode == KSR_PPDEF_QUOTED) {
@@ -196,7 +267,7 @@ found_repl:
 		}
 		defvalue = newval;
 	}
-	if(pp_define_set(defvalue.len, defvalue.s, KSR_PPDEF_QUOTED) < 0) {
+	if(pp_define_set(defvalue.len, defvalue.s, KSR_PPDEF_QUOTED | KSR_PPDEF_NOEVAL) < 0) {
 		LM_ERR("cannot set define value\n");
 		goto error;
 	}
@@ -245,6 +316,20 @@ int pp_subst_run(char **data)
 	if(i != 0)
 		return 1;
 	return 0;
+}
+
+
+int pp_subst_run_size(char **data, int *size)
+{
+	int x;
+	memset(&pp_s_buf, 0, sizeof(pp_s_buf));
+	pp_addstr(&pp_s_buf, *data, *size);
+	x = pp_subst_run(&pp_s_buf.s);
+	if (x > 0) {
+		*data = pp_s_buf.s;
+		*size = x;
+	}
+	return x;
 }
 
 /**

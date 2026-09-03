@@ -242,6 +242,9 @@ void print_expr(struct expr *exp)
 			case MATCH_OP:
 				DBG("=~");
 				break;
+			case NOMATCH_OP:
+				DBG("!~");
+				break;
 			case NO_OP:
 				break;
 			case GT_OP:
@@ -347,6 +350,9 @@ void print_action(struct action *t)
 			break;
 		case ROUTE_T:
 			DBG("route(");
+			break;
+		case ROUTES_T:
+			DBG("routes(");
 			break;
 		case EXEC_T:
 			DBG("exec(");

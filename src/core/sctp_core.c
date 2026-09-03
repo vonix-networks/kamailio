@@ -50,7 +50,7 @@ int sctp_core_init(void)
 void sctp_core_destroy(void)
 {
 	if(_sctp_srapi_set == 0) {
-		LM_INFO("SCTP API not initialized\n");
+		LM_DBG("SCTP API not initialized\n");
 		return;
 	}
 

@@ -526,6 +526,14 @@ int set_ua(struct sip_msg *msg, str *location_ua);
 
 void reset_ua(struct sip_msg *const msg);
 
+int set_global_address(struct sip_msg *msg, str *global_address);
+
+void reset_global_address(struct sip_msg *const msg);
+
+int set_global_port(struct sip_msg *msg, str *global_port);
+
+void reset_global_port(struct sip_msg *const msg);
+
 /** force a specific send socket for forwarding a request.
  * @param msg - sip msg.
  * @param fsocket - forced socket, pointer to struct socket_info, can be 0 (in

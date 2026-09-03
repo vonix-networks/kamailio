@@ -109,6 +109,40 @@ int is_check_self_func_list_set(void);
 
 #define msg_send(_dst, _buf, _len) msg_send_buffer((_dst), (_buf), (_len), 0)
 
+static inline int send_sip_check_fline(char *buf, unsigned int len)
+{
+	char *p;
+	int m;
+
+	m = 0;
+	for(p = buf; p < buf + len; p++) {
+		/* first check if is a reply - starts with SIP/2.0 */
+		if(m == 0) {
+			if(*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')
+				continue;
+			if(buf + len - p < 10)
+				return -1;
+			if(strncmp(p, "SIP/2.0 ", 8) == 0) {
+				LM_DBG("first line indicates a SIP reply\n");
+				return 0;
+			}
+			m = 1;
+		} else {
+			/* check if a request - before end of first line is SIP/2.0 */
+			if(*p != '\r' && *p != '\n')
+				continue;
+			if(p - 10 >= buf) {
+				if(strncmp(p - 8, " SIP/2.0", 8) == 0) {
+					LM_DBG("first line indicates a SIP request\n");
+					return 0;
+				}
+			}
+			return -1;
+		}
+	}
+	return -1;
+}
+
 /* params:
  * dst = struct dest_info containing:
  *    send_sock = 0 if not known (e.g. for udp in some cases), non-0 otherwise;
@@ -345,12 +379,14 @@ static inline int msg_send_buffer(
 done:
 
 	if(!(flags & 1)) {
-		memset(&netinfo, 0, sizeof(sr_net_info_t));
-		netinfo.data.s = outb.s;
-		netinfo.data.len = outb.len;
-		netinfo.dst = dst;
-		evp.data = (void *)&netinfo;
-		sr_event_exec(SREV_NET_DATA_SENT, &evp);
+		if(send_sip_check_fline(outb.s, outb.len) == 0) {
+			memset(&netinfo, 0, sizeof(sr_net_info_t));
+			netinfo.data.s = outb.s;
+			netinfo.data.len = outb.len;
+			netinfo.dst = dst;
+			evp.data = (void *)&netinfo;
+			sr_event_exec(SREV_NET_DATA_SENT, &evp);
+		}
 	}
 
 	if(outb.s != buf)

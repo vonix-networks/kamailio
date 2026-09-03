@@ -818,6 +818,8 @@ void free_sip_msg(struct sip_msg *const msg)
 	reset_instance(msg);
 	reset_ruid(msg);
 	reset_ua(msg);
+	reset_global_address(msg);
+	reset_global_port(msg);
 	if(msg->headers)
 		free_hdr_field_lst(msg->headers);
 	if(msg->body && msg->body->free)
@@ -1052,6 +1054,84 @@ void reset_ua(struct sip_msg *const msg)
 	}
 	msg->location_ua.s = 0;
 	msg->location_ua.len = 0;
+}
+
+int set_global_address(struct sip_msg *msg, str *global_address)
+{
+	char *ptr;
+
+	if(unlikely(!msg || !global_address)) {
+		ERR("invalid global_address parameter value\n");
+		return -1;
+	}
+
+	if(unlikely(global_address->len == 0)) {
+		reset_global_address(msg);
+	} else if(msg->set_global_address.s
+			  && (msg->set_global_address.len >= global_address->len)) {
+		memcpy(msg->set_global_address.s, global_address->s, global_address->len);
+		msg->set_global_address.len = global_address->len;
+	} else {
+		ptr = (char *)pkg_malloc(global_address->len);
+		if(!ptr) {
+			PKG_MEM_ERROR;
+			return -1;
+		}
+		memcpy(ptr, global_address->s, global_address->len);
+		if(msg->set_global_address.s)
+			pkg_free(msg->set_global_address.s);
+		msg->set_global_address.s = ptr;
+		msg->set_global_address.len = global_address->len;
+	}
+	return 0;
+}
+
+void reset_global_address(struct sip_msg *const msg)
+{
+	if(msg->set_global_address.s != 0) {
+		pkg_free(msg->set_global_address.s);
+	}
+	msg->set_global_address.s = 0;
+	msg->set_global_address.len = 0;
+}
+
+int set_global_port(struct sip_msg *msg, str *global_port)
+{
+	char *ptr;
+
+	if(unlikely(!msg || !global_port)) {
+		ERR("invalid global_port parameter value\n");
+		return -1;
+	}
+
+	if(unlikely(global_port->len == 0)) {
+		reset_global_port(msg);
+	} else if(msg->set_global_port.s
+			  && (msg->set_global_port.len >= global_port->len)) {
+		memcpy(msg->set_global_port.s, global_port->s, global_port->len);
+		msg->set_global_port.len = global_port->len;
+	} else {
+		ptr = (char *)pkg_malloc(global_port->len);
+		if(!ptr) {
+			PKG_MEM_ERROR;
+			return -1;
+		}
+		memcpy(ptr, global_port->s, global_port->len);
+		if(msg->set_global_port.s)
+			pkg_free(msg->set_global_port.s);
+		msg->set_global_port.s = ptr;
+		msg->set_global_port.len = global_port->len;
+	}
+	return 0;
+}
+
+void reset_global_port(struct sip_msg *const msg)
+{
+	if(msg->set_global_port.s != 0) {
+		pkg_free(msg->set_global_port.s);
+	}
+	msg->set_global_port.s = 0;
+	msg->set_global_port.len = 0;
 }
 
 /**

@@ -36,6 +36,7 @@
 	#include "mem/mem.h"
 	#include <string.h>
 	#include <stdlib.h>
+	#include <glob.h>
 	#include "ip_addr.h"
 	#include "usr_avp.h"
 	#include "select.h"
@@ -43,6 +44,8 @@
 	#include "sr_compat.h"
 	#include "daemonize.h"
 	#include "ppcfg.h"
+	#include "fmsg.h"
+	#include "pvar.h"
 
 	static void ksr_yy_fatal_error(const char* msg);
 	#define YY_FATAL_ERROR(msg) ksr_yy_fatal_error(msg);
@@ -99,7 +102,7 @@
 	static void count_more();
 	static void count_ignore();
 
-	#define MAX_INCLUDE_DEPTH 10
+	#define MAX_INCLUDE_DEPTH 100
 	static struct sr_yy_state {
 		YY_BUFFER_STATE state;
 		int line;
@@ -111,6 +114,7 @@
 	} include_stack[MAX_INCLUDE_DEPTH];
 	static int include_stack_ptr = 0;
 
+	static int sr_push_yy_states(char *fin);
 	static int sr_push_yy_state(char *fin, int mode);
 	static int sr_pop_yy_state();
 
@@ -131,7 +135,7 @@
 
 /* start conditions */
 %x STRING1 STRING2 STR_BETWEEN COMMENT COMMENT_LN ATTR SELECT AVP_PVAR PVAR_P
-%x PVARID INCLF IMPTF EVRTNAME CFGPRINTMODE CFGPRINTLOADMOD DEFENV_ID DEFENVS_ID
+%x PVARID INCLF IMPTF IMPTFS EVRTNAME CFGPRINTMODE CFGPRINTLOADMOD DEFENV_ID DEFENVS_ID
 %x TRYDEFENV_ID TRYDEFENVS_ID LINECOMMENT DEFINE_ID DEFINE_EOL DEFINE_DATA
 %x IFDEF_ID IFDEF_EOL IFDEF_SKIP IFEXP_STM
 
@@ -161,6 +165,7 @@ ROUTE_ONREPLY onreply_route
 ROUTE_BRANCH branch_route
 ROUTE_SEND onsend_route
 ROUTE_EVENT event_route
+ROUTES	routes
 EXEC	exec
 FORCE_RPORT		"force_rport"|"add_rport"
 LOCAL_RPORT		"local_rport"
@@ -176,6 +181,18 @@ SETFLAG		setflag
 RESETFLAG	resetflag
 ISFLAGSET	isflagset
 FLAGS_DECL	"flags"|"bool"
+SETBFLAG	setbflag
+RESETBFLAG	resetbflag
+ISBFLAGSET	isbflagset
+BFLAGS_DECL	bflags
+SETXFLAG	setxflag
+RESETXFLAG	resetxflag
+ISXFLAGSET	isxflagset
+XFLAGS_DECL	xflags
+SETSFLAG	setsflag
+RESETSFLAG	resetsflag
+ISSFLAGSET	issflagset
+SFLAGS_DECL	sflags
 SETAVPFLAG	setavpflag
 RESETAVPFLAG	resetavpflag
 ISAVPFLAGSET	isavpflagset
@@ -251,6 +268,7 @@ GTE	>=
 LTE	<=
 DIFF	!=
 MATCH	=~
+NOMATCH	!~
 ADDEQ     "+="
 NOT		!|"not"
 LOG_AND		"and"|"&&"
@@ -614,6 +632,7 @@ SUBSTDEFS   substdefs
 /* include files */
 INCLUDEFILE     "include_file"
 IMPORTFILE      "import_file"
+IMPORTFILES     "import_files"
 
 %%
 
@@ -635,6 +654,18 @@ IMPORTFILE      "import_file"
 <INITIAL>{RESETFLAG}	{ count(); yylval.strval=yytext; return RESETFLAG; }
 <INITIAL>{ISFLAGSET}	{ count(); yylval.strval=yytext; return ISFLAGSET; }
 <INITIAL>{FLAGS_DECL}	{ count(); yylval.strval=yytext; return FLAGS_DECL; }
+<INITIAL>{SETBFLAG}	{ count(); yylval.strval=yytext; return SETBFLAG; }
+<INITIAL>{RESETBFLAG}	{ count(); yylval.strval=yytext; return RESETBFLAG; }
+<INITIAL>{ISBFLAGSET}	{ count(); yylval.strval=yytext; return ISBFLAGSET; }
+<INITIAL>{BFLAGS_DECL}	{ count(); yylval.strval=yytext; return BFLAGS_DECL; }
+<INITIAL>{SETXFLAG}	{ count(); yylval.strval=yytext; return SETXFLAG; }
+<INITIAL>{RESETXFLAG}	{ count(); yylval.strval=yytext; return RESETXFLAG; }
+<INITIAL>{ISXFLAGSET}	{ count(); yylval.strval=yytext; return ISXFLAGSET; }
+<INITIAL>{XFLAGS_DECL}	{ count(); yylval.strval=yytext; return XFLAGS_DECL; }
+<INITIAL>{SETSFLAG}	{ count(); yylval.strval=yytext; return SETSFLAG; }
+<INITIAL>{RESETSFLAG}	{ count(); yylval.strval=yytext; return RESETSFLAG; }
+<INITIAL>{ISSFLAGSET}	{ count(); yylval.strval=yytext; return ISSFLAGSET; }
+<INITIAL>{SFLAGS_DECL}	{ count(); yylval.strval=yytext; return SFLAGS_DECL; }
 <INITIAL>{SETAVPFLAG}	{ count(); yylval.strval=yytext; return SETAVPFLAG; }
 <INITIAL>{RESETAVPFLAG}	{ count(); yylval.strval=yytext; return RESETAVPFLAG; }
 <INITIAL>{ISAVPFLAGSET}	{ count(); yylval.strval=yytext; return ISAVPFLAGSET; }
@@ -671,6 +702,7 @@ IMPORTFILE      "import_file"
 <EVRTNAME>{RBRACK}          { count();
 								state=INITIAL_S; BEGIN(INITIAL);
 								return RBRACK; }
+<INITIAL>{ROUTES}	{ count(); yylval.strval=yytext; return ROUTES; }
 <INITIAL>{EXEC}	{ count(); yylval.strval=yytext; return EXEC; }
 <INITIAL>{SET_HOST}	{ count(); yylval.strval=yytext; return SET_HOST; }
 <INITIAL>{SET_HOSTPORT}	{ count(); yylval.strval=yytext; return SET_HOSTPORT; }
@@ -730,6 +762,9 @@ IMPORTFILE      "import_file"
 
 <INITIAL,CFGPRINTMODE>{IMPORTFILE}  { count(); BEGIN(IMPTF); }
 <INITIAL,CFGPRINTMODE>{PREP_START}{IMPORTFILE}  { count(); BEGIN(IMPTF); }
+
+<INITIAL,CFGPRINTMODE>{IMPORTFILES}  { count(); BEGIN(IMPTFS); }
+<INITIAL,CFGPRINTMODE>{PREP_START}{IMPORTFILES}  { count(); BEGIN(IMPTFS); }
 
 <INITIAL>{CFG_SELECT}	{ count(); yylval.strval=yytext; return CFG_SELECT; }
 <INITIAL>{CFG_RESET}	{ count(); yylval.strval=yytext; return CFG_RESET; }
@@ -1097,6 +1132,7 @@ IMPORTFILE      "import_file"
 <INITIAL>{LTE}	{ count(); return LTE; }
 <INITIAL>{DIFF}	{ count(); return DIFF; }
 <INITIAL>{MATCH}	{ count(); return MATCH; }
+<INITIAL>{NOMATCH}	{ count(); return NOMATCH; }
 <INITIAL>{NOT}		{ count(); return NOT; }
 <INITIAL>{LOG_AND}	{ count(); return LOG_AND; }
 <INITIAL>{BIN_AND}	{ count(); return BIN_AND; }
@@ -1411,6 +1447,7 @@ IMPORTFILE      "import_file"
 <DEFINE_DATA>\\{CR}		{	count(); ksr_cfg_print_part(yytext); } /* eat the escaped CR */
 <DEFINE_DATA>{CR}		{	count();
 							ksr_cfg_print_part(yytext);
+							r = pp_subst_run(&s_buf.s);
 							if (pp_define_set(strlen(s_buf.s), s_buf.s, KSR_PPDEF_NORMAL)) return 1;
 							memset(&s_buf, 0, sizeof(s_buf));
 							state = INITIAL;
@@ -1508,6 +1545,20 @@ IMPORTFILE      "import_file"
 				addstr(&s_buf, yytext, yyleng);
 				r = pp_subst_run(&s_buf.s);
 				if(sr_push_yy_state(s_buf.s, 1)<0)
+				{
+					LM_CRIT("error at %s line %d\n", (finame)?finame:"cfg", line);
+					ksr_exit(-1);
+				}
+				memset(&s_buf, 0, sizeof(s_buf));
+				ksr_cfg_print_initial_state();
+}
+
+<IMPTFS>[ \t]*      /* eat the whitespace */
+<IMPTFS>[^ \t\r\n]+   { /* get the import spec */
+				memset(&s_buf, 0, sizeof(s_buf));
+				addstr(&s_buf, yytext, yyleng);
+				r = pp_subst_run(&s_buf.s);
+				if(sr_push_yy_states(s_buf.s) < 0)
 				{
 					LM_CRIT("error at %s line %d\n", (finame)?finame:"cfg", line);
 					ksr_exit(-1);
@@ -1840,6 +1891,124 @@ int yywrap()
 	return 1;
 }
 
+#define MAX_IMPORT_PATH_LENGTH	1024
+#define MAX_DIR_FILES 100
+	static struct sr_yy_filename_state {
+		char filename[MAX_IMPORT_PATH_LENGTH + 1];
+	} import_files[MAX_DIR_FILES];
+
+static int sr_yy_cmpfilesfunc (const void * a, const void * b) {
+	LM_DBG("%s => %s\n", ((struct sr_yy_filename_state*)a)->filename, ((struct sr_yy_filename_state*)b)->filename);
+	return strcmp(((struct sr_yy_filename_state*)a)->filename, ((struct sr_yy_filename_state*)b)->filename) * -1;
+}
+
+static int sr_push_yy_states(char *fin)
+{
+	int ret=0;
+	glob_t globbuf;
+	char fbuf[MAX_IMPORT_PATH_LENGTH];
+	int i, j, l;
+	char *x = NULL;
+	char *newf = NULL;
+	char *tmpfiname = 0;
+
+	l = strlen(fin);
+	if(l >= MAX_IMPORT_PATH_LENGTH)
+	{
+		LM_CRIT("import files location too long (max %i): %s\n", MAX_IMPORT_PATH_LENGTH, fin);
+		return -1;
+	}
+	if(fin[0]!='"' || fin[l-1]!='"')
+	{
+		LM_CRIT("import files spec must be between quotes: %s\n", fin);
+		return -1;
+	}
+	j = 0;
+	for(i=1; i<l-1; i++)
+	{
+		switch(fin[i]) {
+			case '\\':
+				if(i+1==l-1)
+				{
+					LM_CRIT("invalid escape at %d in import_files spec: %s\n", i, fin);
+					return -1;
+				}
+				i++;
+				switch(fin[i]) {
+					case 't':
+						fbuf[j++] = '\t';
+					break;
+					case 'n':
+						fbuf[j++] = '\n';
+					break;
+					case 'r':
+						fbuf[j++] = '\r';
+					break;
+					default:
+						fbuf[j++] = fin[i];
+				}
+			break;
+			default:
+				fbuf[j++] = fin[i];
+		}
+	}
+	if(j==0)
+	{
+		LM_CRIT("invalid import files location spec: %s\n", fin);
+		return -1;
+	}
+	fbuf[j] = '\0';
+
+	if (fbuf[0] != '/') {
+		tmpfiname = (finame==0)?cfg_file:finame;
+		x = strrchr(tmpfiname, '/');
+		if(x != NULL) {
+			int newsize = x - tmpfiname + strlen(fbuf) + 2;
+			if (newsize >= MAX_IMPORT_PATH_LENGTH) {
+				LM_CRIT("import files location too long (max %i): %s\n", MAX_IMPORT_PATH_LENGTH, fin);
+				return -1;
+			}
+			newf = (char*)pkg_malloc(newsize);
+			if(newf==0)
+			{
+				PKG_MEM_CRITICAL;
+				return -1;
+			}
+			newf[0] = '\0';
+			strncat(newf, tmpfiname, x-tmpfiname);
+			strcat(newf, "/");
+			strcat(newf, fbuf);
+			strcpy(fbuf, newf);
+			pkg_free(newf);
+		}
+	}
+
+	if (!glob(fbuf, 0, NULL, &globbuf)) {
+		j = 0;
+		for (i=0;  i <globbuf.gl_pathc; i++) {
+			l = strlen(globbuf.gl_pathv[i]);
+			if(l < MAX_IMPORT_PATH_LENGTH) {
+				sprintf(import_files[j].filename, "\"%s\"", globbuf.gl_pathv[i]);
+				j++;
+				if (j > MAX_DIR_FILES - 1) break;
+			}
+		}
+		globfree(&globbuf);
+		qsort(import_files, j, sizeof(struct sr_yy_filename_state), sr_yy_cmpfilesfunc);
+		for (i=0;  i < j; i++) {
+			LM_DBG("adding %s\n", import_files[i].filename);
+			ret = sr_push_yy_state(import_files[i].filename, 1);
+			if (ret != 0) break;
+			ksr_cfg_print_initial_state();
+		}
+	} else {
+		LM_DBG("nothing imported from %s\n", fbuf);
+		return 0;
+	}
+
+	return ret;
+}
+
 static int sr_push_yy_state(char *fin, int mode)
 {
 	struct sr_yy_fname *fn = NULL;
@@ -2045,7 +2214,7 @@ static int sr_pop_yy_state()
 
 /* define/ifdef support */
 
-#define MAX_DEFINES    512
+#define MAX_DEFINES    2048
 static ksr_ppdefine_t pp_defines[MAX_DEFINES];
 static int pp_num_defines = 0;
 static int pp_define_type = 0;
@@ -2156,6 +2325,9 @@ int pp_define_set(int len, char *text, int mode)
 {
 	int ppos;
 	char *sval = NULL;
+	char *loc_text = text;
+	int loc_len = len;
+	char *tofree = NULL;
 
 	if(pp_define_index == -2) {
 		/* #!trydef that should be ignored */
@@ -2186,10 +2358,47 @@ int pp_define_set(int len, char *text, int mode)
 		return -1;
 	}
 
+	if (pp_subst_run_size(&loc_text, &loc_len) > 0) {
+		text = tofree = loc_text;
+		len = loc_len;
+	}
+
+	if ((mode & KSR_PPDEF_NOEVAL) != KSR_PPDEF_NOEVAL && memchr(text, '$', len) != NULL) {
+		sip_msg_t *fmsg;
+		str newval;
+		str defvalue;
+		defvalue.s = text;
+		defvalue.len = len;
+		fmsg = faked_msg_get_next();
+		if(pv_eval_str(fmsg, &newval, &defvalue)>=0) {
+			str toval;
+			LM_DBG("### evaluated %.*s => %.*s => %.*s\n",
+				pp_defines[ppos].name.len,
+				pp_defines[ppos].name.s,
+				len,text,
+				newval.len, newval.s);
+			if(pkg_str_dup(&toval, &newval) != 0) {
+				LM_BUG("BUG: no memorry to copy '%.*s'\n", newval.len, newval.s);
+				if (tofree) pkg_free(tofree);
+				return -1;
+			}
+			text = toval.s;
+			len = toval.len;
+		} else {
+			LM_BUG("### error evaluating %.*s => %.*s\n",
+				pp_defines[ppos].name.len,
+				pp_defines[ppos].name.s,
+				len,text);
+			if (tofree) pkg_free(tofree);
+			return -1;
+		}
+	}
+
 	if (pp_defines[ppos].value.s != NULL) {
 		LM_BUG("BUG: ID %.*s [%d] overwritten\n",
 			pp_defines[ppos].name.len,
 			pp_defines[ppos].name.s, ppos);
+		if (tofree) pkg_free(tofree);
 		return -1;
 	}
 
@@ -2226,6 +2435,7 @@ int pp_define_set(int len, char *text, int mode)
 			pp_defines[ppos].value.len,
 			pp_defines[ppos].value.s,
 			mode);
+	if (tofree) pkg_free(tofree);
 	return 0;
 }
 

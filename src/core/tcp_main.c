@@ -5492,7 +5492,7 @@ int wss_send(dest_info_t *dst, const char *buf, unsigned len)
 			if(tcp_connection_match == TCPCONN_MATCH_STRICT) {
 				con = tcpconn_lookup(dst->id, &ip, port, from,
 						(dst->send_sock) ? dst->send_sock->port_no : 0, 0,
-						dst->proto);
+						PROTO_NONE);
 			} else {
 				con = tcpconn_get(dst->id, &ip, port, from, 0);
 			}
