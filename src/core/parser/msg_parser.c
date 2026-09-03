@@ -1045,80 +1045,70 @@ void reset_ua(struct sip_msg *const msg)
 	msg->location_ua.len = 0;
 }
 
+/* Per-message advertised address/port (set_advertised_address() /
+ * set_advertised_port() evaluated per message). The value lives in a
+ * per-process buffer: sip_msg structs are copied by value all over the core
+ * and the modules (tm local requests, tmx, xhttp, ...) and the global
+ * advertised_address is assigned into every message by struct copy, so the
+ * message must never own heap memory here (a pkg_free in free_sip_msg freed
+ * the global string and double-freed copies). Same lifetime rules as the
+ * KEMI set_advertised_address(): valid while this process handles the
+ * message. */
+#define KSR_ADV_ADDR_BUF_SIZE 256
+#define KSR_ADV_PORT_BUF_SIZE 16
+static char _ksr_adv_addr_buf[KSR_ADV_ADDR_BUF_SIZE];
+static char _ksr_adv_port_buf[KSR_ADV_PORT_BUF_SIZE];
+
 int set_global_address(struct sip_msg *msg, str *global_address)
 {
-	char *ptr;
-
 	if(unlikely(!msg || !global_address)) {
 		ERR("invalid global_address parameter value\n");
 		return -1;
 	}
-
 	if(unlikely(global_address->len == 0)) {
 		reset_global_address(msg);
-	} else if(msg->set_global_address.s
-			  && (msg->set_global_address.len >= global_address->len)) {
-		memcpy(msg->set_global_address.s, global_address->s, global_address->len);
-		msg->set_global_address.len = global_address->len;
-	} else {
-		ptr = (char *)pkg_malloc(global_address->len);
-		if(!ptr) {
-			PKG_MEM_ERROR;
-			return -1;
-		}
-		memcpy(ptr, global_address->s, global_address->len);
-		if(msg->set_global_address.s)
-			pkg_free(msg->set_global_address.s);
-		msg->set_global_address.s = ptr;
-		msg->set_global_address.len = global_address->len;
+		return 0;
 	}
+	if(unlikely(global_address->len >= KSR_ADV_ADDR_BUF_SIZE)) {
+		ERR("advertised address too long (%d)\n", global_address->len);
+		return -1;
+	}
+	memcpy(_ksr_adv_addr_buf, global_address->s, global_address->len);
+	_ksr_adv_addr_buf[global_address->len] = 0;
+	msg->set_global_address.s = _ksr_adv_addr_buf;
+	msg->set_global_address.len = global_address->len;
 	return 0;
 }
 
 void reset_global_address(struct sip_msg *const msg)
 {
-	if(msg->set_global_address.s != 0) {
-		pkg_free(msg->set_global_address.s);
-	}
 	msg->set_global_address.s = 0;
 	msg->set_global_address.len = 0;
 }
 
 int set_global_port(struct sip_msg *msg, str *global_port)
 {
-	char *ptr;
-
 	if(unlikely(!msg || !global_port)) {
 		ERR("invalid global_port parameter value\n");
 		return -1;
 	}
-
 	if(unlikely(global_port->len == 0)) {
 		reset_global_port(msg);
-	} else if(msg->set_global_port.s
-			  && (msg->set_global_port.len >= global_port->len)) {
-		memcpy(msg->set_global_port.s, global_port->s, global_port->len);
-		msg->set_global_port.len = global_port->len;
-	} else {
-		ptr = (char *)pkg_malloc(global_port->len);
-		if(!ptr) {
-			PKG_MEM_ERROR;
-			return -1;
-		}
-		memcpy(ptr, global_port->s, global_port->len);
-		if(msg->set_global_port.s)
-			pkg_free(msg->set_global_port.s);
-		msg->set_global_port.s = ptr;
-		msg->set_global_port.len = global_port->len;
+		return 0;
 	}
+	if(unlikely(global_port->len >= KSR_ADV_PORT_BUF_SIZE)) {
+		ERR("advertised port too long (%d)\n", global_port->len);
+		return -1;
+	}
+	memcpy(_ksr_adv_port_buf, global_port->s, global_port->len);
+	_ksr_adv_port_buf[global_port->len] = 0;
+	msg->set_global_port.s = _ksr_adv_port_buf;
+	msg->set_global_port.len = global_port->len;
 	return 0;
 }
 
 void reset_global_port(struct sip_msg *const msg)
 {
-	if(msg->set_global_port.s != 0) {
-		pkg_free(msg->set_global_port.s);
-	}
 	msg->set_global_port.s = 0;
 	msg->set_global_port.len = 0;
 }
