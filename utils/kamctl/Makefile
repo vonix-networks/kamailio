@@ -264,6 +264,29 @@ install-modules: $(bin_prefix)/$(bin_dir)
 				fi ;\
 			done ; \
 		fi
+		# install db_kazoo stuff (2600hz: sqlite schema through KazooDB)
+		if [ "$(DBKAZOOON)" = "yes" ]; then \
+			mkdir -p $(modules_prefix)/$(lib_dir)/kamctl ; \
+			sed -e "s#/usr/local/sbin#$(bin_target)#g" \
+				< kamctl.db_kazoo > $(kamctltmpdir)/kamctl.db_kazoo ; \
+			$(INSTALL_CFG) $(kamctltmpdir)/kamctl.db_kazoo \
+				$(modules_prefix)/$(lib_dir)/kamctl/kamctl.db_kazoo ; \
+			rm -fr $(kamctltmpdir)/kamctl.db_kazoo ; \
+			sed -e "s#/usr/local/share/kamailio#$(data_target)#g" \
+				< kamdbctl.db_kazoo > $(kamctltmpdir)/kamdbctl.db_kazoo ; \
+			$(INSTALL_TOUCH) $(modules_prefix)/$(lib_dir)/kamctl/kamdbctl.db_kazoo ; \
+			$(INSTALL_CFG) $(kamctltmpdir)/kamdbctl.db_kazoo $(modules_prefix)/$(lib_dir)/kamctl/ ; \
+			rm -fr $(kamctltmpdir)/kamdbctl.db_kazoo ; \
+			mkdir -p $(data_prefix)/$(data_dir)/db_kazoo ; \
+			for FILE in $(wildcard db_kazoo/*) ; do \
+				if [ -f $$FILE ] ; then \
+				$(INSTALL_TOUCH) $$FILE \
+					$(data_prefix)/$(data_dir)/db_kazoo/`basename "$$FILE"` ; \
+				$(INSTALL_CFG) $$FILE \
+					$(data_prefix)/$(data_dir)/db_kazoo/`basename "$$FILE"` ; \
+				fi ;\
+			done ; \
+		fi
 		# install Redis stuff
 		if [ "$(REDISON)" = "yes" ]; then \
 			mkdir -p $(data_prefix)/$(data_dir)/db_redis/kamailio ; \
