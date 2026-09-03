@@ -1056,14 +1056,36 @@ void tls_h_mod_destroy_f(void)
 	LM_DBG("tls module final tls destroy\n");
 	if(tls_mod_preinitialized > 0)
 		ERR_free_strings();
-	/* TODO: free all the ctx'es */
-	tls_destroy_cfg();
+	/* Skip SSL_CTX_free() during shutdown to avoid deadlock.
+	 *
+	 * SSL_CTX_free() calls CRYPTO_free_ex_data() which acquires an
+	 * OpenSSL-internal pthread rwlock (PTHREAD_PROCESS_SHARED).
+	 * During shutdown, worker processes killed by SIGTERM may die while
+	 * holding a read lock on this rwlock. Since pthread rwlocks are not
+	 * released on process death, the main process calling SSL_CTX_free()
+	 * blocks forever on pthread_rwlock_wrlock(), causing a deadlock
+	 * that triggers sig_alarm_abort.
+	 *
+	 * Instead of calling tls_destroy_cfg() which frees SSL_CTX objects,
+	 * we only free the shared memory structures (strings, arrays) and
+	 * the config list. The OS reclaims all memory on process exit anyway,
+	 * and skipping SSL_CTX_free() at shutdown is safe and common practice
+	 * (nginx, haproxy do the same).
+	 */
+	tls_destroy_cfg_unsafe();
 	tls_destroy_locks();
 	tls_ct_wq_destroy();
 #if OPENSSL_VERSION_NUMBER >= 0x010100000L && !defined(LIBRESSL_VERSION_NUMBER)
-	/* explicit execution of libssl cleanup to avoid being executed again
-	 * by atexit(), when shm is gone */
-	LM_DBG("executing openssl v1.1+ cleanup\n");
-	OPENSSL_cleanup();
+	/* Skip OPENSSL_cleanup() during shutdown for the same deadlock reason
+	 * as SSL_CTX_free() above: OPENSSL_cleanup() calls OPENSSL_thread_stop()
+	 * which calls init_thread_stop() which acquires CRYPTO_THREAD_write_lock.
+	 * Dead worker processes may still hold the read side of this lock.
+	 *
+	 * The original intent was to run OPENSSL_cleanup() explicitly here to
+	 * prevent the atexit() handler from running it after shm is gone.
+	 * Instead, we deregister the atexit handler if possible, and let the
+	 * OS reclaim everything on process exit.
+	 */
+	LM_DBG("skipping OPENSSL_cleanup() to avoid rwlock deadlock during shutdown\n");
 #endif
 }

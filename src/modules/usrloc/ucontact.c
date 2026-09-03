@@ -152,7 +152,11 @@ ucontact_t *new_ucontact(
 	c->last_keepalive = time(NULL);
 	c->tcpconn_id = _ci->tcpconn_id;
 	c->server_id = _ci->server_id;
-	c->keepalive = (_ci->cflags & ul_nat_bflag) ? 1 : 0;
+	if(ul_ka_flag) {
+		c->keepalive = (_ci->cflags & ul_ka_flag) ? 1 : 0;
+	} else {
+		c->keepalive = (_ci->cflags & ul_nat_bflag) ? 1 : 0;
+	}
 
 	/* Use core xavp if set, otherwise does nothing */
 	ucontact_xavp_store(c);

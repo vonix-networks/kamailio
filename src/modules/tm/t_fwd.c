@@ -1583,7 +1583,7 @@ int t_send_branch(struct cell *t, int branch, struct sip_msg *p_msg,
 		}
 #endif
 		uac->icode = 908; /* internal code set to delivery failure */
-		LM_WARN("sending request on branch %d failed\n", branch);
+		LM_DBG("sending request on branch %d failed\n", branch);
 		if(proxy) {
 			proxy->errors++;
 			proxy->ok = 0;

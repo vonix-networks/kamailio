@@ -678,6 +678,7 @@ static void free_rr_lump(struct lump **list)
 static int w_remove_record_route(sip_msg_t *_m, char *_s1, char *_s2)
 {
 	free_rr_lump(&(_m->add_rm));
+	_m->msg_flags &= ~ FL_RR_ADDED;
 	return 1;
 }
 

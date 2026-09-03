@@ -687,6 +687,7 @@ static inline int update_contacts(struct sip_msg *_m, urecord_t *_r, int _mode,
 	ucontact_t *c, *ptr, *ptr0;
 	int expires, ret, updated;
 	unsigned int flags;
+	int force_inserted = 0;
 #ifdef USE_TCP
 	int e_max, tcp_check;
 	struct sip_uri uri;
@@ -792,17 +793,40 @@ static inline int update_contacts(struct sip_msg *_m, urecord_t *_r, int _mode,
 				}
 				rc = 3;
 			} else {
+				int verify = 0;
 				/* do update */
 				if(_mode) {
 					ptr = _r->contacts;
 					while(ptr) {
 						ptr0 = ptr->next;
-						if(ptr != c)
+						if(ptr != c) {
+							verify++;
 							_reg_ul.delete_ucontact(_r, ptr);
+						}
 						ptr = ptr0;
 					}
 					updated = 1;
 				}
+
+				if (cfg_get(registrar, registrar_cfg, verify_callid)) {
+					/* If call-id has changed then delete all records with different call-id
+					 * then insert new record
+					*/
+					if ((ci->callid->len != c->callid.len || strncmp(ci->callid->s, c->callid.s, ci->callid->len) != 0)) {
+						LM_DBG("callid changed for contact\n");
+						ptr = _r->contacts;
+						while(ptr) {
+							ptr0 = ptr->next;
+							if ((ptr != c) && (ptr->callid.len != c->callid.len || strncmp(ptr->callid.s, c->callid.s, ptr->callid.len))) {
+								ul.delete_ucontact(_r, ptr);
+							}
+							ptr = ptr0;
+						}
+						updated = 1;
+						verify++;
+					}
+				}
+
 				/* If call-id has changed then delete all records with this sip.instance
 				 * then insert new record */
 				if(ci->instance.s != NULL
@@ -810,6 +834,7 @@ static inline int update_contacts(struct sip_msg *_m, urecord_t *_r, int _mode,
 								|| strncmp(ci->callid->s, c->callid.s,
 										   ci->callid->len)
 										   != 0)) {
+					LM_DBG("callid changed for contact instance\n");
 					ptr = _r->contacts;
 					while(ptr) {
 						ptr0 = ptr->next;
@@ -822,7 +847,14 @@ static inline int update_contacts(struct sip_msg *_m, urecord_t *_r, int _mode,
 						ptr = ptr0;
 					}
 					updated = 1;
+					verify++;
 				}
+
+				/* check if we should return inserted instead */
+				if(verify) {
+					for (force_inserted = 0, ptr = _r->contacts; ptr; ptr = ptr->next, force_inserted++);
+				}
+
 				if(_reg_ul.update_ucontact(_r, c, ci) < 0) {
 					rerrno = R_UL_UPD_C;
 					LM_ERR("failed to update contact\n");
@@ -860,6 +892,9 @@ static inline int update_contacts(struct sip_msg *_m, urecord_t *_r, int _mode,
 		/*force_tcp_conn_lifetime( &_m->rcv , e_max + 10 );*/
 	}
 #endif
+
+	if(force_inserted == 1)
+		rc = 1;
 
 	return rc;
 error:

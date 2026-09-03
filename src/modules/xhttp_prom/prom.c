@@ -129,6 +129,9 @@ int prom_body_name_printf(prom_ctx_t *ctx, char *fmt, ...)
 			if(p[i] == '-') {
 				p[i] = '_';
 			}
+			if(p[i] == ':') {
+				p[i] = '_';
+			}
 		}
 
 		reply->body.len += len;

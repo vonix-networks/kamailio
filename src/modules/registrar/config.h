@@ -38,6 +38,7 @@ struct cfg_group_registrar
 	qvalue_t default_q;
 	unsigned int append_branches;
 	unsigned int use_expired_contacts;
+	unsigned int verify_callid;
 };
 
 extern struct cfg_group_registrar default_registrar_cfg;

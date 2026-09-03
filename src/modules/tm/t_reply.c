@@ -1029,8 +1029,35 @@ int run_failure_handlers(
 
 	/* failure_route for a local UAC? */
 	if(!shmem_msg) {
+#ifndef WITH_LOCAL_FAILURE
 		LM_WARN("no UAC support (%d, %d) \n", on_failure, t->tmcb_hl.reg_types);
 		return 0;
+#else
+		sip_msg_t local_msg;
+
+		if(!is_local(t)) {
+			LM_WARN("no UAC support (%d, %d) \n", on_failure, t->tmcb_hl.reg_types);
+			return 0;
+		}
+
+		/* parse the retr. buffer */
+		memset(&local_msg, 0, sizeof(struct sip_msg));
+		local_msg.buf = t->uac[picked_branch].request.buffer;
+		local_msg.len = t->uac[picked_branch].request.buffer_len;
+		if (parse_msg(local_msg.buf, local_msg.len, &local_msg) != 0) {
+			LM_ERR("failed to parse retr buffer (weird!): \n%.*s\n",
+					(int)local_msg.len, local_msg.buf);
+			return 0;
+		}
+		t->uas.request = sip_msg_shm_clone(&local_msg, NULL, 1);
+		free_sip_msg(&local_msg);
+
+		if(!t->uas.request) {
+			LM_ERR("UAS REQ IS NULL AFTER PARSE \n");
+			return 0;
+		}
+		shmem_msg = t->uas.request;
+#endif
 	}
 
 	/* don't start faking anything if we don't have to */

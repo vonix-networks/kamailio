@@ -122,6 +122,8 @@ extern str ds_setid_pvname;
 extern pv_spec_t ds_setid_pv;
 extern str ds_attrs_pvname;
 extern pv_spec_t ds_attrs_pv;
+extern str ds_uri_pvname;
+extern pv_spec_t ds_uri_pv;
 
 /* Structure containing pointers to TM-functions */
 extern struct tm_binds tmb;
@@ -204,6 +206,7 @@ typedef struct _ds_attrs {
 	str ping_from;
 	str obproxy;
 	int rpriority;
+	str ping_headers;
 } ds_attrs_t;
 
 typedef struct _ds_latency_stats {
