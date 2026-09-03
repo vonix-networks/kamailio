@@ -39,7 +39,10 @@ install-kazoodb-tools: $(KAZOODB) $(KAZOODIFF) $(bin_prefix)/$(bin_dir)
 	$(INSTALL_BIN) $(KAZOODB) $(bin_prefix)/$(bin_dir)/KazooDB
 	$(INSTALL_BIN) $(KAZOODIFF) $(bin_prefix)/$(bin_dir)/KazooDB-diff
 
-install-scripts: install-kazoodb-tools
+install-kazoodb-scripts: $(bin_prefix)/$(bin_dir)
+	DBKAZOOON=yes $(MAKE) -C ../../../utils/kamctl/ install-modules
+
+install-scripts: install-kazoodb-tools install-kazoodb-scripts
 endif
 
 modclean:
