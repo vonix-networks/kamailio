@@ -96,6 +96,8 @@ extern int ul_skip_remote_socket;
 extern unsigned int ul_nat_bflag;
 /*! flag to protect against wrong initialization */
 extern unsigned int ul_init_flag;
+/*! ka flag */
+extern unsigned int ul_ka_flag;
 
 extern str ul_xavp_contact_name;
 

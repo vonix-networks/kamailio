@@ -258,6 +258,46 @@ void tls_free_domain(tls_domain_t *d)
 
 
 /**
+ * @brief Free TLS domain shared memory without calling SSL_CTX_free()
+ *
+ * Used during process shutdown to avoid deadlock on OpenSSL internal
+ * pthread rwlocks that may be held by dead worker processes.
+ * SSL_CTX_free() internally calls CRYPTO_free_ex_data() which tries
+ * to acquire a write lock — if a killed worker still holds the read
+ * lock, the main process deadlocks.
+ *
+ * @param d freed domain
+ */
+void tls_free_domain_unsafe(tls_domain_t *d)
+{
+	if(!d)
+		return;
+	if(d->ctx) {
+		/* Skip SSL_CTX_free() to avoid deadlock on OpenSSL rwlocks */
+		shm_free(d->ctx);
+	}
+
+	if(d->cipher_list.s)
+		shm_free(d->cipher_list.s);
+	if(d->ca_file.s)
+		shm_free(d->ca_file.s);
+	if(d->ca_path.s)
+		shm_free(d->ca_path.s);
+	if(d->crl_file.s)
+		shm_free(d->crl_file.s);
+	if(d->pkey_file.s)
+		shm_free(d->pkey_file.s);
+	if(d->cert_file.s)
+		shm_free(d->cert_file.s);
+	if(d->server_name.s)
+		shm_free(d->server_name.s);
+	if(d->server_id.s)
+		shm_free(d->server_id.s);
+	shm_free(d);
+}
+
+
+/**
  * @brief Free TLS configuration structure
  * @param cfg freed configuration
  */
@@ -300,6 +340,62 @@ void tls_destroy_cfg(void)
 			ptr = *tls_domains_cfg;
 			*tls_domains_cfg = (*tls_domains_cfg)->next;
 			tls_free_cfg(ptr);
+		}
+
+		shm_free(tls_domains_cfg);
+		tls_domains_cfg = 0;
+	}
+}
+
+
+/**
+ * @brief Free TLS configuration without calling SSL_CTX_free()
+ * @param cfg freed configuration
+ */
+static void tls_free_cfg_unsafe(tls_domains_cfg_t *cfg)
+{
+	tls_domain_t *p;
+	while(cfg->srv_list) {
+		p = cfg->srv_list;
+		cfg->srv_list = cfg->srv_list->next;
+		tls_free_domain_unsafe(p);
+	}
+	while(cfg->cli_list) {
+		p = cfg->cli_list;
+		cfg->cli_list = cfg->cli_list->next;
+		tls_free_domain_unsafe(p);
+	}
+	if(cfg->srv_default)
+		tls_free_domain_unsafe(cfg->srv_default);
+	if(cfg->cli_default)
+		tls_free_domain_unsafe(cfg->cli_default);
+	shm_free(cfg);
+}
+
+
+/**
+ * @brief Destroy all TLS configuration data without SSL_CTX_free()
+ *
+ * Safe version for process shutdown that avoids deadlock on OpenSSL
+ * internal pthread rwlocks. Frees shared memory structures but skips
+ * SSL_CTX_free() which can deadlock if dead worker processes still
+ * hold OpenSSL read locks.
+ */
+void tls_destroy_cfg_unsafe(void)
+{
+	tls_domains_cfg_t *ptr;
+
+	if(tls_domains_cfg_lock) {
+		lock_destroy(tls_domains_cfg_lock);
+		lock_dealloc(tls_domains_cfg_lock);
+		tls_domains_cfg_lock = 0;
+	}
+
+	if(tls_domains_cfg) {
+		while(*tls_domains_cfg) {
+			ptr = *tls_domains_cfg;
+			*tls_domains_cfg = (*tls_domains_cfg)->next;
+			tls_free_cfg_unsafe(ptr);
 		}
 
 		shm_free(tls_domains_cfg);

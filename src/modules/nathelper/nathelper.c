@@ -1886,7 +1886,7 @@ static inline int replace_sdp_ip(struct sip_msg *msg, str *org_body, char *line,
 				body1 = body2;
 				continue;
 			}
-			LM_ERR("no `IP[4|6]' in `%s' field\n", line);
+			LM_DBG("no `IP[4|6]' in `%s' field\n", line);
 			return -1;
 		}
 		if(!pf1)

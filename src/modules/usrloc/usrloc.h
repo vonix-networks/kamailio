@@ -215,6 +215,7 @@ typedef struct usrloc_api
 	int use_domain;		   /*! use_domain module parameter */
 	int db_mode;		   /*! db_mode module parameter */
 	unsigned int nat_flag; /*! nat_flag module parameter */
+	unsigned int ka_flag;   /*! ka_flag module parameter */
 
 	register_udomain_t register_udomain;
 	get_udomain_t get_udomain;

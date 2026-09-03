@@ -229,6 +229,7 @@ char *ul_ka_reply_codes_str = "0";
 /* flags */
 unsigned int ul_nat_bflag = (unsigned int)-1;
 unsigned int ul_init_flag = 0;
+unsigned int ul_ka_flag = (unsigned int)-1;
 
 db1_con_t *ul_dbh = 0; /* Database connection handle */
 db_func_t ul_dbf;
@@ -307,6 +308,7 @@ static param_export_t params[] = {
 	{"ka_interval", PARAM_INT, &ul_ka_interval},
 	{"ka_randomize", PARAM_INT, &ul_ka_randomize},
 	{"ka_timeout", PARAM_INT, &ul_keepalive_timeout},
+	{"ka_flag", INT_PARAM, &ul_ka_flag},
 	{"ka_loglevel", PARAM_INT, &ul_ka_loglevel},
 	{"ka_logmsg", PARAM_STR, &ul_ka_logmsg},
 	{"ka_reply_codes", PARAM_STRING, &ul_ka_reply_codes_str},
@@ -449,6 +451,15 @@ static int mod_init(void)
 		return -1;
 	} else {
 		ul_nat_bflag = 1 << ul_nat_bflag;
+	}
+
+	if(ul_ka_flag == (unsigned int)-1) {
+		ul_ka_flag = 0;
+	} else if(ul_ka_flag>=8*sizeof(ul_ka_flag) ) {
+		LM_ERR("ka flag index (%d) too big!\n", ul_ka_flag);
+		return -1;
+	} else {
+		ul_ka_flag = 1 << ul_ka_flag;
 	}
 
 	for(i = 0; i < ul_preload_index; i++) {

@@ -43,7 +43,8 @@ struct cfg_group_registrar default_registrar_cfg = {
 		0,			   /* case_sensitive */
 		Q_UNSPECIFIED, /* default_q */
 		1,			   /* append_branches */
-		0			   /* use_expired_contacts */
+		0,			   /* use_expired_contacts */
+		1			   /* verify_callid */
 };
 
 void *registrar_cfg = &default_registrar_cfg;
@@ -90,4 +91,7 @@ cfg_def_t registrar_cfg_def[] =
 				{"use_expired_contacts", CFG_VAR_INT, 0, 0, 0, 0,
 						"Toggles using expired contacts as if they were "
 						"active."},
+				{"verify_callid", CFG_VAR_INT, 0, 0, 0, 0,
+						"Toggles verifying different call-id for "
+						"registration."},
 				{0, 0, 0, 0, 0, 0}};

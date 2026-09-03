@@ -1226,6 +1226,9 @@ static int ki_xavp_params_implode_mode(
 		return -1;
 	}
 
+	val.rs.len--;
+	val.rs.s[val.rs.len] = '\0';
+
 	val.flags = PV_VAL_STR;
 	if(vspec->setf(msg, &vspec->pvp, EQ_T, &val) < 0) {
 		LM_ERR("setting PV failed [%.*s]\n", svname->len, svname->s);

@@ -1140,7 +1140,7 @@ int handle_subscribe(struct sip_msg *msg, str watcher_user, str watcher_domain)
 		}
 	} else {
 		if(get_stored_info(msg, &subs, &reply_code, &reply_str) < 0) {
-			LM_INFO("getting stored info\n");
+			LM_DBG("getting stored info failed\n");
 			goto error;
 		}
 		found = 1;
@@ -1731,7 +1731,7 @@ int get_database_info(
 		return -1;
 
 	if(result && result->n <= 0) {
-		LM_INFO("No matching subscription dialog found in database\n");
+		LM_DBG("No matching subscription dialog found in database\n");
 
 		pa_dbf.free_result(pa_db, result);
 		*reply_code = 481;
