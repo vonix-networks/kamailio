@@ -308,7 +308,7 @@ static param_export_t params[] = {
 	{"ka_interval", PARAM_INT, &ul_ka_interval},
 	{"ka_randomize", PARAM_INT, &ul_ka_randomize},
 	{"ka_timeout", PARAM_INT, &ul_keepalive_timeout},
-	{"ka_flag", INT_PARAM, &ul_ka_flag},
+	{"ka_flag", PARAM_INT, &ul_ka_flag},
 	{"ka_loglevel", PARAM_INT, &ul_ka_loglevel},
 	{"ka_logmsg", PARAM_STR, &ul_ka_logmsg},
 	{"ka_reply_codes", PARAM_STRING, &ul_ka_reply_codes_str},

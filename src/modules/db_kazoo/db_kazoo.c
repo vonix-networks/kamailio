@@ -89,25 +89,25 @@ static void kz_db_log(void *pArg, int iErrCode, const char *zMsg);
 static int db_kazoo_bind_api(db_func_t *dbb);
 
 static param_export_t params[] = {
-    {"retry_on_busy", INT_PARAM, &default_db_kazoo_cfg.retry_on_busy},
-    {"retry_on_busy_retries", INT_PARAM, &default_db_kazoo_cfg.retry_on_busy_retries},
-    {"retry_on_busy_sleep", INT_PARAM, &default_db_kazoo_cfg.retry_on_busy_sleep},
+    {"retry_on_busy", PARAM_INT, &default_db_kazoo_cfg.retry_on_busy},
+    {"retry_on_busy_retries", PARAM_INT, &default_db_kazoo_cfg.retry_on_busy_retries},
+    {"retry_on_busy_sleep", PARAM_INT, &default_db_kazoo_cfg.retry_on_busy_sleep},
 
-    {"log_sql_errors", INT_PARAM, &default_db_kazoo_cfg.log_sql_errors},
-    {"sql_log", INT_PARAM, &default_db_kazoo_cfg.log_sql},
-    {"sql_log_level", INT_PARAM, &default_db_kazoo_cfg.sql_log_level},
+    {"log_sql_errors", PARAM_INT, &default_db_kazoo_cfg.log_sql_errors},
+    {"sql_log", PARAM_INT, &default_db_kazoo_cfg.log_sql},
+    {"sql_log_level", PARAM_INT, &default_db_kazoo_cfg.sql_log_level},
 
-    {"trace_hook", INT_PARAM, &dbk_trace_hook_enable},
-    {"trace_enable", INT_PARAM, &default_db_kazoo_cfg.trace_enable},
-    {"trace_log_level", INT_PARAM, &default_db_kazoo_cfg.trace_log_level},
-    {"trace_filter", INT_PARAM, &default_db_kazoo_cfg.trace_filter},
+    {"trace_hook", PARAM_INT, &dbk_trace_hook_enable},
+    {"trace_enable", PARAM_INT, &default_db_kazoo_cfg.trace_enable},
+    {"trace_log_level", PARAM_INT, &default_db_kazoo_cfg.trace_log_level},
+    {"trace_filter", PARAM_INT, &default_db_kazoo_cfg.trace_filter},
 
-    {"max_rows", INT_PARAM, &default_db_kazoo_cfg.max_rows},
+    {"max_rows", PARAM_INT, &default_db_kazoo_cfg.max_rows},
 
-    {"pooling", INT_PARAM, &default_db_kazoo_cfg.pooling},
+    {"pooling", PARAM_INT, &default_db_kazoo_cfg.pooling},
 
-    {"enable_foreign_keys", INT_PARAM, &dbk_enable_foreign_keys},
-    {"enable_triggers", INT_PARAM, &dbk_enable_triggers},
+    {"enable_foreign_keys", PARAM_INT, &dbk_enable_foreign_keys},
+    {"enable_triggers", PARAM_INT, &dbk_enable_triggers},
     {0, 0, 0}
 };
 
