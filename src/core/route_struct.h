@@ -65,6 +65,7 @@ enum expr_op
 	/* expression operator if type==ELEM_T */
 	EQUAL_OP = 10,
 	MATCH_OP,
+	NOMATCH_OP,
 	GT_OP,
 	LT_OP,
 	GTE_OP,
@@ -112,6 +113,7 @@ enum action_type
 	LOG_T,
 	ERROR_T,
 	ROUTE_T,
+	ROUTES_T,
 	EXEC_T,
 	SET_HOST_T,
 	SET_HOSTPORT_T,
@@ -150,6 +152,15 @@ enum action_type
 	SETFLAG_T,
 	RESETFLAG_T,
 	ISFLAGSET_T,
+	SETBFLAG_T,
+	RESETBFLAG_T,
+	ISBFLAGSET_T,
+	SETXFLAG_T,
+	RESETXFLAG_T,
+	ISXFLAGSET_T,
+	SETSFLAG_T,
+	RESETSFLAG_T,
+	ISSFLAGSET_T,
 	AVPFLAG_OPER_T,
 	LEN_GT_T,
 	PREFIX_T,
@@ -221,7 +232,8 @@ enum _operand_subtype
 	STRING_RVE_ST /* RVE converted to a string (fparam hack) */,
 	RVE_FREE_FIXUP_ST /* (str)RVE fixed up by a reversable fixup */,
 	FPARAM_DYN_ST /* temporary only (fparam hack) */,
-	CFG_GROUP_ST
+	CFG_GROUP_ST,
+	ROUTE_LIST
 };
 
 typedef enum _expr_l_type expr_l_type;

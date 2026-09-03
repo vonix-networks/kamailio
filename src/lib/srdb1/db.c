@@ -423,6 +423,7 @@ int db_table_version(
 
 	if(RES_ROW_N(res) == 0) {
 		LM_DBG("no row for table %.*s found\n", table->len, ZSW(table->s));
+		dbf->free_result(connection, res);
 		return 0;
 	}
 

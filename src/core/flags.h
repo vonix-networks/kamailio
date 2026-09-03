@@ -52,6 +52,10 @@ typedef unsigned int flag_t;
 
 #define MAX_FLAG ((unsigned int)(sizeof(flag_t) * CHAR_BIT - 1))
 
+#define MAX_BFLAG MAX_FLAG
+#define MAX_XFLAG KSR_MAX_XFLAG
+#define MAX_SFLAG MAX_FLAG
+
 struct sip_msg;
 
 int setflag(struct sip_msg *msg, flag_t flag);
@@ -84,10 +88,25 @@ int issflagset(flag_t flag);
 flag_t getsflags(void);
 
 int flag_in_range(flag_t flag);
+int bflag_in_range(flag_t flag);
+int xflag_in_range(flag_t flag);
+int sflag_in_range(flag_t flag);
 
 int register_flag(char *name, int pos);
+int register_bflag(char *name, int pos);
+int register_xflag(char *name, int pos);
+int register_sflag(char *name, int pos);
+
 int get_flag_no(char *name, int len);
+int get_bflag_no(char *name, int len);
+int get_xflag_no(char *name, int len);
+int get_sflag_no(char *name, int len);
+
 int check_flag(int pos);
+int check_bflag(int pos);
+int check_xflag(int pos);
+int check_sflag(int pos);
+
 void init_named_flags(void);
 
 #endif
