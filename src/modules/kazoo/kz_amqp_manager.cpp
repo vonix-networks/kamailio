@@ -2517,7 +2517,8 @@ void setup_relay_listener()
 	gExchanges["relay"] = relay;
 
 	AMQP::Table relay_x_args;
-	relay_x_args["hash-header"] = "relay-id";
+	relay_x_args["hash-header"] = "relay-id"; // RabbitMQ's consistent-hash plugin
+	relay_x_args["x-hash-on"] = "relay-id";   // LavinMQ's; each broker ignores the other's
 	relay_x_args["x-nodename"] = node().c_str();
 
 	std::string relay_uuid = uuids::to_string(uuids::uuid_system_generator{}());
